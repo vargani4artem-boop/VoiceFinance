@@ -502,7 +502,7 @@ class TelegramBot:
                 "• 🎤 <i>«Ой, смени последнюю категорию на бензин»</i>\n\n"
                 "Нажмите кнопку ниже для перехода в визуальный UI!"
             )
-            web_url = os.environ.get("WEB_APP_URL", "https://banner-authors-capable-vision.trycloudflare.com")
+            web_url = os.environ.get("WEB_APP_URL", "https://voicefinance.onrender.com")
             reply_markup = {
                 "inline_keyboard": [[
                     {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": web_url}}
