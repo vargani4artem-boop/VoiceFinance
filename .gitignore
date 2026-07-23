@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+finance.db
+*.png
+*.pdf
+cloudflared.exe
+test_pdf.py

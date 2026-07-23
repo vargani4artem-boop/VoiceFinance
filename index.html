@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceFinance AI — Голосовой финансовый ассистент</title>
+    <meta name="description" content="AI-ассистент для управления личными финансами с полностью голосовым интерфейсом, автоматической категоризацией и аналитикой.">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-icon">
+                <i class="fa-solid fa-microphone-lines"></i>
+            </div>
+            <div>
+                <span class="brand-title">VoiceFinance</span>
+                <span class="brand-badge">Siri AI Edition</span>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" id="btnExportCSV">
+                <i class="fa-solid fa-file-csv"></i> CSV
+            </button>
+            <button class="btn-secondary" id="btnExportPDF">
+                <i class="fa-solid fa-file-pdf"></i> PDF Отчёт
+            </button>
+            <button class="btn-secondary" id="btnManualAdd">
+                <i class="fa-solid fa-plus"></i> Добавить вручную
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <!-- Hero Siri Voice Assistant Card -->
+        <div class="voice-hero-card">
+            <div class="voice-trigger-wrapper">
+                <button class="voice-trigger-btn" id="voiceBtn" title="Нажмите для начала распознавания">
+                    <i class="fa-solid fa-microphone" id="voiceBtnIcon"></i>
+                </button>
+            </div>
+            <div class="voice-status-text" id="voiceStatus">Нажмите микрофон или скажите «Эй Финансы»</div>
+            <div class="voice-subtext" id="voiceSubtext">Назовите сумму и категорию (например: «расход 50 долларов на бензин»)</div>
+            <canvas class="voice-waveform-canvas" id="voiceWaveform" width="300" height="40"></canvas>
+            
+            <div class="voice-hint-tags">
+                <span class="hint-tag" data-cmd="расход 50 долларов на бензин">⛽ расход 50$ на бензин</span>
+                <span class="hint-tag" data-cmd="доход 3000 зарплата">💰 доход 3000$ зарплата</span>
+                <span class="hint-tag" data-cmd="покажи расходы на продукты">🛒 покажи расходы на продукты</span>
+                <span class="hint-tag" data-cmd="сравни бензин за три месяца">📊 сравни бензин за 3 месяца</span>
+                <span class="hint-tag" data-cmd="во сколько раз доходы больше расходов">⚖️ во сколько раз доходы больше</span>
+                <span class="hint-tag" data-cmd="какой мой топ расход">🔥 топ расход по категориям</span>
+            </div>
+        </div>
+
+        <!-- Metric Summary Grid -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Общие доходы</span>
+                    <div class="metric-icon-bg icon-income"><i class="fa-solid fa-arrow-down-left"></i></div>
+                </div>
+                <div class="metric-value val-income" id="metricIncome">$0</div>
+                <div class="metric-sub">Автоматический учёт поступлений</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Общие расходы</span>
+                    <div class="metric-icon-bg icon-expense"><i class="fa-solid fa-arrow-up-right"></i></div>
+                </div>
+                <div class="metric-value val-expense" id="metricExpense">$0</div>
+                <div class="metric-sub">Распределение по категориям</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Текущий баланс</span>
+                    <div class="metric-icon-bg icon-balance"><i class="fa-solid fa-wallet"></i></div>
+                </div>
+                <div class="metric-value val-balance" id="metricBalance">$0</div>
+                <div class="metric-sub">Чистый остаток средств</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Доходы / Расходы</span>
+                    <div class="metric-icon-bg icon-ratio"><i class="fa-solid fa-scale-balanced"></i></div>
+                </div>
+                <div class="metric-value val-ratio" id="metricRatio">0.0x</div>
+                <div class="metric-sub" id="metricRatioText">Коэффициент финансовой стабильности</div>
+            </div>
+        </div>
+
+        <!-- Dashboard Analytics & Transactions Grid -->
+        <div class="dashboard-grid">
+            
+            <!-- Left Column: Analytics Charts -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title"><i class="fa-solid fa-chart-pie" style="color: #6366F1;"></i> Аналитика расходов и тренды</h2>
+                    </div>
+                    <div class="charts-grid">
+                        <div class="chart-wrapper">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="compareCard" style="display: none;">
+                    <div class="card-header">
+                        <h2 class="card-title"><i class="fa-solid fa-chart-line" style="color: #8B5CF6;"></i> Голосовое сравнение категорий</h2>
+                        <button class="close-btn" id="btnCloseCompare">&times;</button>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="compareChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Recent Voice Transactions -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fa-solid fa-list-check" style="color: #10B981;"></i> Операции</h2>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);" id="txCount">0 записей</span>
+                </div>
+                
+                <div class="tx-list" id="txList">
+                    <div class="empty-state">
+                        <div class="empty-icon"><i class="fa-solid fa-microphone-slash"></i></div>
+                        <p>Операций пока нет. Скажите команду микрофону!</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Modal for Manual Adding -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Новая операция</h3>
+                <button class="close-btn" id="btnCloseModal">&times;</button>
+            </div>
+            <form id="addTxForm">
+                <div class="form-group">
+                    <label class="form-label">Тип</label>
+                    <select class="form-select" id="txType">
+                        <option value="expense">Расход</option>
+                        <option value="income">Доход</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Сумма ($)</label>
+                    <input type="number" step="0.01" class="form-input" id="txAmount" placeholder="50.00" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Категория</label>
+                    <select class="form-select" id="txCategory">
+                        <option value="продукты">продукты</option>
+                        <option value="бензин">бензин</option>
+                        <option value="транспорт">транспорт</option>
+                        <option value="коммунальные">коммунальные</option>
+                        <option value="кредиты">кредиты</option>
+                        <option value="развлечения">развлечения</option>
+                        <option value="бизнес">бизнес</option>
+                        <option value="кафе и рестораны">кафе и рестораны</option>
+                        <option value="здоровье">здоровье</option>
+                        <option value="зарплата">зарплата</option>
+                        <option value="фриланс">фриланс</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <input type="text" class="form-input" id="txDesc" placeholder="Например: покупка на заправке">
+                </div>
+                <button type="submit" class="btn-primary">Сохранить запись</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="js/voice_engine.js"></script>
+    <script src="js/nlp_parser.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/exporter.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
