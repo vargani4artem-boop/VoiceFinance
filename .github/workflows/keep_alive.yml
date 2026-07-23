@@ -1,0 +1,13 @@
+name: Keep VoiceFinance Awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Runs every 10 minutes
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Server
+        run: |
+          curl -s https://voicefinance.onrender.com/api/categories
