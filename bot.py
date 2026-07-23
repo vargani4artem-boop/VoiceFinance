@@ -428,63 +428,72 @@ class TelegramBot:
         return self.send_request('sendMessage', payload)
 
     def process_ai_result(self, chat_id, gemini_res, raw_input="сообщение"):
-        lower_input = (raw_input or "").lower()
-        is_chart_request = any(kw in lower_input for kw in ['пдф', 'pdf', 'отчет', 'отчёт', 'график', 'диаграмм', 'кругов', 'процент', 'соотношен', 'съел', 'объем'])
+        # 1. If Gemini responded successfully, prioritize its AI intent
+        if gemini_res:
+            intent = gemini_res.get('intent', 'CHAT')
+            ai_reply = gemini_res.get('ai_reply', '')
+            transcribed = gemini_res.get('transcribed_text', '')
+            prefix = f"🎤 <i>«{transcribed}»</i>\n\n" if transcribed else ""
 
-        if is_chart_request or (gemini_res and gemini_res.get('intent') == 'EXPORT_PDF'):
-            income, expense, balance = get_analytics()
+            if intent == 'EXPORT_PDF':
+                income, expense, balance = get_analytics()
+                pdf_path = generate_pdf_report("voicefinance_report.pdf")
+                caption_msg = (
+                    f"📊 <b>Ваш PDF отчёт с диаграммой готов!</b>\n\n"
+                    f"💰 Траты: <b>${expense:,.2f}</b> из <b>${income:,.2f}</b>\n"
+                    f"✨ {ai_reply}"
+                )
+                self.send_document(chat_id, pdf_path, caption=caption_msg)
+                return
+
+            elif intent == 'ADD_TX' and gemini_res.get('amount'):
+                tx_type = gemini_res.get('type', 'expense')
+                amt = gemini_res.get('amount')
+                cat = gemini_res.get('category', 'прочее')
+                save_transaction(tx_type, amt, cat, transcribed or raw_input)
+                income, expense, balance = get_analytics()
+                
+                full_reply = f"{prefix}✨ {ai_reply}\n\n💳 <b>Текущий баланс: ${balance:,.2f}</b>"
+                self.send_message(chat_id, full_reply)
+                return
+
+            elif intent == 'CORRECT_LAST':
+                new_amt = gemini_res.get('new_amount') or gemini_res.get('amount')
+                new_cat = gemini_res.get('new_category') or gemini_res.get('category')
+                correct_last_transaction(new_amt, new_cat)
+                income, expense, balance = get_analytics()
+                
+                full_reply = f"{prefix}🔄 {ai_reply}\n\n💳 <b>Обновленный баланс: ${balance:,.2f}</b>"
+                self.send_message(chat_id, full_reply)
+                return
+
+            elif intent == 'DELETE_LAST':
+                cat, amt = delete_last_transaction()
+                income, expense, balance = get_analytics()
+                full_reply = f"{prefix}🗑️ {ai_reply}\n\n💳 <b>Баланс: ${balance:,.2f}</b>"
+                self.send_message(chat_id, full_reply)
+                return
+
+            else:
+                # Chat or general query
+                full_reply = f"{prefix}{ai_reply}" if prefix else ai_reply
+                self.send_message(chat_id, full_reply)
+                return
+
+        # 2. Fallback rule-based parsing ONLY if Gemini API is rate-limited or fails
+        lower_input = (raw_input or "").lower()
+        is_pdf_request = any(kw in lower_input for kw in ['пдф', 'pdf', 'отчет', 'отчёт', 'график в пдф', 'выгрузи отчет'])
+
+        if is_pdf_request:
             pdf_path = generate_pdf_report("voicefinance_report.pdf")
-            caption_msg = (
-                f"📊 <b>Ваша круговая диаграмма и процентный отчёт готовы!</b>\n\n"
-                f"💰 Общий объём трат: <b>${expense:,.2f}</b> из заработанных <b>${income:,.2f}</b>\n"
-                f"📄 Файл PDF со встроенной круговой диаграммой прикреплён ниже."
-            )
+            caption_msg = f"📄 <b>Ваш готовый PDF отчёт с финансовой сводкой!</b>"
             self.send_document(chat_id, pdf_path, caption=caption_msg)
             return
 
-        if not gemini_res:
-            income, expense, balance = get_analytics()
-            self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для интерактивного UI с графиками.")
-            return
+        # Simple fallback response
+        income, expense, balance = get_analytics()
+        self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для перехода в визуальный UI.")
 
-        intent = gemini_res.get('intent', 'CHAT')
-        ai_reply = gemini_res.get('ai_reply', '')
-        transcribed = gemini_res.get('transcribed_text', '')
-
-        if not chat_id in USER_CHAT_HISTORY:
-            USER_CHAT_HISTORY[chat_id] = []
-        USER_CHAT_HISTORY[chat_id].append({'ai': ai_reply})
-
-        prefix = f"🎤 <i>«{transcribed}»</i>\n\n" if transcribed else ""
-
-        if intent == 'ADD_TX' and gemini_res.get('amount'):
-            tx_type = gemini_res.get('type', 'expense')
-            amt = gemini_res.get('amount')
-            cat = gemini_res.get('category', 'прочее')
-            save_transaction(tx_type, amt, cat, transcribed or raw_input)
-            income, expense, balance = get_analytics()
-            
-            full_reply = f"{prefix}✨ {ai_reply}\n\n💳 <b>Текущий баланс: ${balance:,.2f}</b>"
-            self.send_message(chat_id, full_reply)
-
-        elif intent == 'CORRECT_LAST':
-            new_amt = gemini_res.get('new_amount') or gemini_res.get('amount')
-            new_cat = gemini_res.get('new_category') or gemini_res.get('category')
-            correct_last_transaction(new_amt, new_cat)
-            income, expense, balance = get_analytics()
-            
-            full_reply = f"{prefix}🔄 {ai_reply}\n\n💳 <b>Обновленный баланс: ${balance:,.2f}</b>"
-            self.send_message(chat_id, full_reply)
-
-        elif intent == 'DELETE_LAST':
-            cat, amt = delete_last_transaction()
-            income, expense, balance = get_analytics()
-            full_reply = f"{prefix}🗑️ {ai_reply}\n\n💳 <b>Баланс: ${balance:,.2f}</b>"
-            self.send_message(chat_id, full_reply)
-
-        else:
-            full_reply = f"{prefix}{ai_reply}" if prefix else ai_reply
-            self.send_message(chat_id, full_reply)
 
     def handle_update(self, update):
         msg = update.get('message')
