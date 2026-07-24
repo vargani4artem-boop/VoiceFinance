@@ -251,6 +251,10 @@ BOT_STATUS = {
     "status": "not_started",
     "error": None,
     "last_poll": None,
+    "last_update_received": None,
+    "last_update_id": None,
+    "last_chat_id": None,
+    "last_text_received": None,
     "token_prefix": TOKEN[:10] if TOKEN else None
 }
 
@@ -264,7 +268,6 @@ def start_telegram_bot():
         BOT_STATUS["status"] = "polling"
         
         # Override start_polling to update last_poll timestamp
-        original_polling = telegram_bot.start_polling
         def polling_with_status():
             while True:
                 BOT_STATUS["last_poll"] = datetime.now().isoformat()
@@ -273,6 +276,14 @@ def start_telegram_bot():
                     if res and res.get('ok'):
                         for update in res.get('result', []):
                             telegram_bot.offset = update['update_id'] + 1
+                            
+                            # Track last update details
+                            msg = update.get('message', {})
+                            BOT_STATUS["last_update_received"] = datetime.now().isoformat()
+                            BOT_STATUS["last_update_id"] = update.get('update_id')
+                            BOT_STATUS["last_chat_id"] = msg.get('chat', {}).get('id') if msg else None
+                            BOT_STATUS["last_text_received"] = msg.get('text') or ("Voice message" if msg.get('voice') else None) if msg else None
+                            
                             telegram_bot.handle_update(update)
                 except Exception as ex:
                     print(f"[Bot Polling Error] {ex}")
