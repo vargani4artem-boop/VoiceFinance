@@ -634,7 +634,7 @@ class TelegramBot:
 
         # Smart fallback explanation if Gemini failed
         is_question = any(kw in lower_input for kw in ['ли', 'как', 'почему', 'что', 'где', 'когда', 'можешь', 'умеешь', 'таблиц'])
-        if is_question:
+        if is_question or raw_input == "голосовая заметка":
             error_msg = (
                 "⚠️ <b>Временные ограничения связи с ИИ</b>\n\n"
                 "Ваш текущий API ключ Gemini исчерпал суточные лимиты запросов (429 Resource Exhausted).\n\n"
