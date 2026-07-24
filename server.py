@@ -131,7 +131,15 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         self.send_json({'success': True, 'data': txs})
 
     def get_bot_status(self):
-        self.send_json({'success': True, 'data': BOT_STATUS})
+        try:
+            import bot
+            status_copy = BOT_STATUS.copy()
+            status_copy["has_genai_client"] = bot.genai_client is not None
+            status_copy["gemini_key_prefix"] = bot.GEMINI_KEY[:6] if bot.GEMINI_KEY else None
+            status_copy["gemini_key_length"] = len(bot.GEMINI_KEY) if bot.GEMINI_KEY else 0
+            self.send_json({'success': True, 'data': status_copy})
+        except Exception as e:
+            self.send_json({'success': False, 'error': f"Failed to get bot status: {e}"})
 
     def add_transaction(self, data):
         tx_type = data.get('type', 'expense')
