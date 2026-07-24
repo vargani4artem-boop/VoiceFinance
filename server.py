@@ -83,6 +83,8 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_categories()
         elif parsed.path == '/api/analytics':
             self.get_analytics()
+        elif parsed.path == '/api/bot-status':
+            self.get_bot_status()
         else:
             super().do_GET()
 
@@ -126,6 +128,9 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         txs = [dict(r) for r in rows]
         conn.close()
         self.send_json({'success': True, 'data': txs})
+
+    def get_bot_status(self):
+        self.send_json({'success': True, 'data': BOT_STATUS})
 
     def add_transaction(self, data):
         tx_type = data.get('type', 'expense')
@@ -233,14 +238,45 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             }
         })
 
+BOT_STATUS = {
+    "status": "not_started",
+    "error": None,
+    "last_poll": None,
+    "token_prefix": TOKEN[:10] if TOKEN else None
+}
+
 def start_telegram_bot():
+    global BOT_STATUS
+    BOT_STATUS["status"] = "starting"
     try:
         import bot
         print("[Server] Initializing Telegram Bot in background thread...")
         telegram_bot = bot.TelegramBot(bot.TOKEN)
-        telegram_bot.start_polling()
+        BOT_STATUS["status"] = "polling"
+        
+        # Override start_polling to update last_poll timestamp
+        original_polling = telegram_bot.start_polling
+        def polling_with_status():
+            while True:
+                BOT_STATUS["last_poll"] = datetime.now().isoformat()
+                try:
+                    res = telegram_bot.send_request('getUpdates', {'offset': telegram_bot.offset, 'timeout': 30})
+                    if res and res.get('ok'):
+                        for update in res.get('result', []):
+                            telegram_bot.offset = update['update_id'] + 1
+                            telegram_bot.handle_update(update)
+                except Exception as ex:
+                    print(f"[Bot Polling Error] {ex}")
+                    BOT_STATUS["error"] = f"Polling error: {ex}"
+                    time.sleep(3)
+                time.sleep(0.5)
+        
+        polling_with_status()
     except Exception as e:
         print(f"[Server] Telegram Bot background thread error: {e}")
+        BOT_STATUS["status"] = "failed"
+        BOT_STATUS["error"] = str(e)
+
 
 def run_server():
     init_db()
