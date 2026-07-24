@@ -608,7 +608,22 @@ class TelegramBot:
             self.send_document(chat_id, pdf_path, caption=caption_msg)
             return
 
-        # Simple fallback response
+        # Smart fallback explanation if Gemini failed
+        is_question = any(kw in lower_input for kw in ['ли', 'как', 'почему', 'что', 'где', 'когда', 'можешь', 'умеешь', 'таблиц'])
+        if is_question:
+            error_msg = (
+                "⚠️ <b>Временные ограничения связи с ИИ</b>\n\n"
+                "Ваш текущий API ключ Gemini исчерпал суточные лимиты запросов (429 Resource Exhausted).\n\n"
+                "<b>Как это исправить за 10 секунд:</b>\n"
+                "1. Получите новый бесплатный ключ в Google AI Studio: 👉 <b><a href='https://aistudio.google.com/'>aistudio.google.com</a></b>\n"
+                "2. Зайдите в панель управления Render ➔ ваш сервис ➔ вкладка <b>Environment</b>.\n"
+                "3. Обновите значение переменной <code>GEMINI_API_KEY</code> новым ключом.\n"
+                "4. Сохраните изменения, и бот сразу же сможет полноценно отвечать на любые вопросы!"
+            )
+            self.send_message(chat_id, error_msg)
+            return
+
+        # Simple fallback response for record entry
         income, expense, balance = get_analytics()
         self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для перехода в визуальный UI.")
 
