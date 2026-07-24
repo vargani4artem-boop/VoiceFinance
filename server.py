@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 PORT = int(os.environ.get("PORT", 8000))
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
