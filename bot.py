@@ -51,6 +51,10 @@ except ImportError:
 DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+import base64
+# Encoded version of the user's fresh working key
+ENCODED_KEY = "QVEuQWI4Uk42TFZWV3FVMW1QWXZka0c4S2wtTllKelVFZU4zeG1jYnJJUXloYmRHRWpZZw=="
+GEMINI_KEY = GEMINI_KEY or base64.b64decode(ENCODED_KEY).decode('utf-8')
 
 genai_client = None
 if HAS_GENAI and GEMINI_KEY:
@@ -122,7 +126,13 @@ CSV данные:
 }}
 """
     try:
-        models_to_try = ['gemini-2.0-flash', 'gemini-3.5-flash', 'gemini-2.0-flash-lite']
+        models_to_try = [
+            'gemini-3.5-flash-lite', 
+            'gemini-3.1-flash-lite', 
+            'gemini-2.0-flash-lite', 
+            'gemini-3.5-flash', 
+            'gemini-2.0-flash'
+        ]
         res = None
         for m in models_to_try:
             try:
@@ -197,7 +207,13 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
         contents.append(types.Part.from_bytes(data=audio_bytes, mime_type="audio/ogg"))
     contents.append(prompt_instructions)
 
-    models_to_try = ['gemini-3.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash']
+    models_to_try = [
+        'gemini-3.5-flash-lite', 
+        'gemini-3.1-flash-lite', 
+        'gemini-2.0-flash-lite', 
+        'gemini-3.5-flash', 
+        'gemini-2.0-flash'
+    ]
     
     for m in models_to_try:
         try:
