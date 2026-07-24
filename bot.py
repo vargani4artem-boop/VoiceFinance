@@ -475,13 +475,45 @@ class TelegramBot:
                 return
 
             else:
-                # Chat or general query
+                # Chat or general query. Check if user asked for web app / link / site
+                lower_input = (raw_input or "").lower()
+                is_app_request = any(kw in lower_input for kw in ['приложен', 'ссылк', 'веб', 'сайт', 'открыть ui', 'интерфейс'])
+                
+                if is_app_request:
+                    app_msg = (
+                        f"🌐 <b>Вот ссылка на ваше персональное веб-приложение:</b>\n"
+                        f"https://voicefinance.onrender.com\n\n"
+                        f"Вы также можете открыть его прямо внутри Telegram, нажав на кнопку ниже! Там вы найдете все графики, процентные диаграммы и сможете управлять транзакциями вручную."
+                    )
+                    reply_markup = {
+                        "inline_keyboard": [[
+                            {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": "https://voicefinance.onrender.com"}}
+                        ]]
+                    }
+                    self.send_message(chat_id, app_msg, reply_markup)
+                    return
+                
                 full_reply = f"{prefix}{ai_reply}" if prefix else ai_reply
                 self.send_message(chat_id, full_reply)
                 return
 
         # 2. Fallback rule-based parsing ONLY if Gemini API is rate-limited or fails
         lower_input = (raw_input or "").lower()
+        is_app_request = any(kw in lower_input for kw in ['приложен', 'ссылк', 'веб', 'сайт', 'открыть ui', 'интерфейс'])
+        if is_app_request:
+            app_msg = (
+                f"🌐 <b>Вот ссылка на ваше персональное веб-приложение:</b>\n"
+                f"https://voicefinance.onrender.com\n\n"
+                f"Вы также можете открыть его прямо внутри Telegram, нажав на кнопку ниже!"
+            )
+            reply_markup = {
+                "inline_keyboard": [[
+                    {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": "https://voicefinance.onrender.com"}}
+                ]]
+            }
+            self.send_message(chat_id, app_msg, reply_markup)
+            return
+
         is_pdf_request = any(kw in lower_input for kw in ['пдф', 'pdf', 'отчет', 'отчёт', 'график в пдф', 'выгрузи отчет'])
 
         if is_pdf_request:
