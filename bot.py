@@ -73,6 +73,91 @@ def clean_json_string(raw_text):
         text = text[:-3]
     return text.strip()
 
+def extract_google_sheets_id(text):
+    match = re.search(r'docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]+)', text)
+    return match.group(1) if match else None
+
+def import_google_sheet(spreadsheet_id, chat_id):
+    csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv"
+    req = urllib.request.Request(csv_url, headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            csv_bytes = resp.read()
+            csv_text = csv_bytes.decode('utf-8', errors='ignore')
+    except Exception as e:
+        print(f"[CSV Download Error] {e}")
+        return (
+            "❌ Не удалось прочитать таблицу по ссылке.\n\n"
+            "<b>Как исправить:</b>\n"
+            "1. Откройте вашу Google Таблицу.\n"
+            "2. Нажмите кнопку <b>«Поделиться»</b> (Share) в правом верхнем углу.\n"
+            "3. В разделе «Общий доступ» измените уровень доступа на <b>«Все, у кого есть ссылка, могут просматривать»</b> (Anyone with the link can view).\n"
+            "4. Отправьте ссылку еще раз!"
+        )
+
+    # Extract first 100 lines
+    lines = csv_text.splitlines()[:100]
+    csv_sample = "\n".join(lines)
+    
+    prompt = f"""
+Ты — финансовый импортёр. Проанализируй этот CSV-текст из Google Таблиц пользователя. 
+Определи колонки даты, категории, суммы и описания.
+Извлеки все строки расходов и доходов.
+
+CSV данные:
+{csv_sample}
+
+Верни СТРОГО чистый JSON формата:
+{{
+  "success": true,
+  "transactions": [
+    {{
+      "type": "expense" | "income",
+      "amount": number,
+      "category": "продукты" | "бензин" | "транспорт" | "коммунальные" | "кредиты" | "развлечения" | "бизнес" | "кафе и рестораны" | "здоровье" | "зарплата" | "фриланс" | "прочее",
+      "description": string,
+      "date": "YYYY-MM-DD"
+    }}
+  ]
+}}
+"""
+    try:
+        models_to_try = ['gemini-2.0-flash', 'gemini-3.5-flash', 'gemini-2.0-flash-lite']
+        res = None
+        for m in models_to_try:
+            try:
+                res = genai_client.models.generate_content(
+                    model=m,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                break
+            except Exception:
+                continue
+        
+        if not res:
+            return "❌ Все ИИ-модели заняты. Пожалуйста, попробуйте импортировать файл чуть позже."
+
+        cleaned = clean_json_string(res.text)
+        data = json.loads(cleaned)
+        
+        txs = data.get('transactions', [])
+        saved_count = 0
+        for t in txs:
+            if t.get('amount'):
+                save_transaction(
+                    t.get('type', 'expense'),
+                    t.get('amount'),
+                    t.get('category', 'прочее'),
+                    t.get('description', t.get('description') or 'Импорт Google Sheets')
+                )
+                saved_count += 1
+        
+        return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
+    except Exception as e:
+        print(f"[Gemini CSV Parse Error] {e}")
+        return "❌ Не удалось распознать структуру таблицы. Убедитесь, что таблица содержит колонки с понятными названиями (например: Дата, Сумма, Категория, Описание)."
+
 def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
     if not genai_client:
         return None
@@ -105,13 +190,6 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
   "new_category": string_or_null,
   "ai_reply": "Твой ответ. Если вопрос сложный или просветительский — распиши его подробно, по шагам, с эмодзи!"
 }}
-
-Важные правила намерения (intent):
-1. Если просит показать график, диаграмму, процентное соотношение, выгрузить отчет, прислать документ -> intent = "EXPORT_PDF".
-2. Если добавляет расход или доход ("купил продукты 500", "заправился на 2000") -> intent = "ADD_TX".
-3. Если исправляет прошлую сумму/категорию ("ой не 2000 а 1500") -> intent = "CORRECT_LAST".
-4. Если просит отменить/удалить -> intent = "DELETE_LAST".
-5. Если просто беседует, здоровается, задает вопросы -> intent = "CHAT".
 """
 
     contents = []
@@ -428,6 +506,14 @@ class TelegramBot:
         return self.send_request('sendMessage', payload)
 
     def process_ai_result(self, chat_id, gemini_res, raw_input="сообщение"):
+        # Check if the raw input contains a Google Sheet URL first!
+        sheet_id = extract_google_sheets_id(raw_input)
+        if sheet_id:
+            self.send_message(chat_id, "📥 Обнаружил ссылку на Google Таблицу! Скачиваю и импортирую данные...")
+            import_reply = import_google_sheet(sheet_id, chat_id)
+            self.send_message(chat_id, import_reply)
+            return
+
         # 1. If Gemini responded successfully, prioritize its AI intent
         if gemini_res:
             intent = gemini_res.get('intent', 'CHAT')
@@ -525,7 +611,6 @@ class TelegramBot:
         # Simple fallback response
         income, expense, balance = get_analytics()
         self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для перехода в визуальный UI.")
-
 
     def handle_update(self, update):
         msg = update.get('message')
