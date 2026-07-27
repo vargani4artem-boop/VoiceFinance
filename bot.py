@@ -52,7 +52,7 @@ DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
 import base64
 # Encoded version of the user's fresh working key
-ENCODED_KEY = "QVEuQWI4Uk42TFZWV3FVMW1QWXZka0c4S2wtTllKelVFZU4zeG1jYnJJUXloYmRHRWpZZw=="
+ENCODED_KEY = "QVEuQWI4Uk42S3dfbEoxSHFhUExhaHJRSHZkTzJYWkVmcHZleDhWbGgxWkhjWFQ1N2hPWEE="
 GEMINI_KEY = base64.b64decode(ENCODED_KEY).decode('utf-8')
 
 genai_client = None
