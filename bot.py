@@ -649,60 +649,69 @@ class TelegramBot:
         self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для перехода в визуальный UI.")
 
     def handle_update(self, update):
-        msg = update.get('message')
-        if not msg:
-            return
-        
-        chat_id = msg['chat']['id']
-        text = msg.get('text', '')
-        voice = msg.get('voice')
-        
-        # Start command
-        if text.startswith('/start') or text.startswith('/help'):
-            welcome = (
-                "<b>🎙️ Привет! Я твой голосовой AI-ассистент VoiceFinance.</b>\n\n"
-                "Отправляй любые голосовые сообщения или текст на любые темы! Я воспринимаю всё: вопросы, разговоры, заметки, расходы, самоисправления и запросы круговых диаграмм/отчётов.\n\n"
-                "<b>Например:</b>\n"
-                "• 🎤 <i>«Покажи диаграмму расходов в процентах»</i>\n"
-                "• 🎤 <i>«Запиши 1500 рублей на продукты»</i>\n"
-                "• 🎤 <i>«Ой, смени последнюю категорию на бензин»</i>\n\n"
-                "Нажмите кнопку ниже для перехода в визуальный UI!"
-            )
-            web_url = os.environ.get("WEB_APP_URL", "https://voicefinance.onrender.com")
-            reply_markup = {
-                "inline_keyboard": [[
-                    {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": web_url}}
-                ]]
-            }
-            self.send_message(chat_id, welcome, reply_markup)
-            return
-
-        # Voice Message handling with Multimodal Gemini Speech-to-Text
-        if voice:
-            file_id = voice['file_id']
-            file_info = self.send_request('getFile', {'file_id': file_id})
+        try:
+            msg = update.get('message')
+            if not msg:
+                return
             
-            if file_info and file_info.get('ok'):
-                file_path = file_info['result']['file_path']
-                audio_bytes = self.download_file(file_path)
+            chat_id = msg['chat']['id']
+            text = msg.get('text', '')
+            voice = msg.get('voice')
+            
+            # Start command
+            if text.startswith('/start') or text.startswith('/help'):
+                welcome = (
+                    "<b>🎙️ Привет! Я твой голосовой AI-ассистент VoiceFinance.</b>\n\n"
+                    "Отправляй любые голосовые сообщения или текст на любые темы! Я воспринимаю всё: вопросы, разговоры, заметки, расходы, самоисправления и запросы круговых диаграмм/отчётов.\n\n"
+                    "<b>Например:</b>\n"
+                    "• 🎤 <i>«Покажи диаграмму расходов в процентах»</i>\n"
+                    "• 🎤 <i>«Запиши 1500 рублей на продукты»</i>\n"
+                    "• 🎤 <i>«Ой, смени последнюю категорию на бензин»</i>\n\n"
+                    "Нажмите кнопку ниже для перехода в визуальный UI!"
+                )
+                web_url = os.environ.get("WEB_APP_URL", "https://voicefinance.onrender.com")
+                reply_markup = {
+                    "inline_keyboard": [[
+                        {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": web_url}}
+                    ]]
+                }
+                self.send_message(chat_id, welcome, reply_markup)
+                return
+
+            # Voice Message handling with Multimodal Gemini Speech-to-Text
+            if voice:
+                file_id = voice['file_id']
+                file_info = self.send_request('getFile', {'file_id': file_id})
                 
-                if audio_bytes:
-                    gemini_res = ask_gemini_brain(chat_id=chat_id, audio_bytes=audio_bytes)
-                    self.process_ai_result(chat_id, gemini_res, raw_input="голосовая заметка")
+                if file_info and file_info.get('ok'):
+                    file_path = file_info['result']['file_path']
+                    audio_bytes = self.download_file(file_path)
+                    
+                    if audio_bytes:
+                        gemini_res = ask_gemini_brain(chat_id=chat_id, audio_bytes=audio_bytes)
+                        self.process_ai_result(chat_id, gemini_res, raw_input="голосовая заметка")
+                    else:
+                        self.send_message(chat_id, "❌ Не удалось загрузить аудиозапись.")
                 else:
-                    self.send_message(chat_id, "❌ Не удалось загрузить аудиозапись.")
-            else:
-                self.send_message(chat_id, "❌ Ошибка получения звукового файла от Telegram.")
-            return
+                    self.send_message(chat_id, "❌ Ошибка получения звукового файла от Telegram.")
+                return
 
-        # Text Message handling
-        if text:
-            if not chat_id in USER_CHAT_HISTORY:
-                USER_CHAT_HISTORY[chat_id] = []
-            USER_CHAT_HISTORY[chat_id].append({'user': text})
+            # Text Message handling
+            if text:
+                if not chat_id in USER_CHAT_HISTORY:
+                    USER_CHAT_HISTORY[chat_id] = []
+                USER_CHAT_HISTORY[chat_id].append({'user': text})
 
-            gemini_res = ask_gemini_brain(user_text=text, chat_id=chat_id)
-            self.process_ai_result(chat_id, gemini_res, raw_input=text)
+                gemini_res = ask_gemini_brain(user_text=text, chat_id=chat_id)
+                self.process_ai_result(chat_id, gemini_res, raw_input=text)
+        except Exception as e:
+            err_str = str(e)
+            print(f"[Handle Update Error] {e}")
+            GEMINI_ERRORS.append(f"handle_update: {err_str}")
+            try:
+                self.send_message(chat_id, f"❌ <b>Ошибка обработки:</b> {err_str}\n\nПожалуйста, отправьте сообщение еще раз.")
+            except Exception:
+                pass
 
     def start_polling(self):
         print(f"[Bot] Multimodal Voice & Percentage Pie Chart Gemini Bot is polling...")
