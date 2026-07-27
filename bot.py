@@ -66,6 +66,7 @@ if HAS_GENAI and GEMINI_KEY:
 
 # Per-user conversational memory
 USER_CHAT_HISTORY = {}
+GEMINI_ERRORS = []
 
 def clean_json_string(raw_text):
     text = raw_text.strip()
@@ -229,13 +230,9 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
             return data
         except Exception as e:
             err_str = str(e)
-            try:
-                import server
-                if "gemini_errors" not in server.BOT_STATUS:
-                    server.BOT_STATUS["gemini_errors"] = []
-                server.BOT_STATUS["gemini_errors"].append(f"{m}: {err_str}")
-            except Exception:
-                pass
+            GEMINI_ERRORS.append(f"{m}: {err_str}")
+            if len(GEMINI_ERRORS) > 20:
+                GEMINI_ERRORS.pop(0)
             
             if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                 time.sleep(1)

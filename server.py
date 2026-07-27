@@ -137,6 +137,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             status_copy["has_genai_client"] = bot.genai_client is not None
             status_copy["gemini_key_prefix"] = bot.GEMINI_KEY[:6] if bot.GEMINI_KEY else None
             status_copy["gemini_key_length"] = len(bot.GEMINI_KEY) if bot.GEMINI_KEY else 0
+            status_copy["gemini_errors"] = getattr(bot, "GEMINI_ERRORS", [])
             self.send_json({'success': True, 'data': status_copy})
         except Exception as e:
             self.send_json({'success': False, 'error': f"Failed to get bot status: {e}"})
