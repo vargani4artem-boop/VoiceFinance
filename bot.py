@@ -184,6 +184,15 @@ CSV образец:
         rows = list(reader)
         print(f"[Import] Total CSV rows read: {len(rows)}")
         
+        # Auto-detect header row index by scanning rows for headers keywords
+        header_row_idx = 0
+        for idx, r in enumerate(rows):
+            r_str = "".join(r).lower()
+            if any(k in r_str for k in ["дата", "date", "комментар", "comment", "сумма", "amount", "продукт", "авто"]):
+                header_row_idx = idx
+                break
+        print(f"[Import] Header row index auto-detected: {header_row_idx}")
+        
         saved_count = 0
         skipped_count = 0
         layout_type = mapping.get("layout_type", "standard")
@@ -192,7 +201,7 @@ CSV образец:
         if layout_type == "category_columns":
             tables = mapping.get("category_columns_mapping", {}).get("tables", [])
             for table in tables:
-                header_row_idx = table.get("header_row_index", 0)
+                # Use auto-detected header row index instead of Gemini guess
                 date_idx = table.get("date_col_index", 0)
                 desc_idx = table.get("description_col_index")
                 def_type = table.get("default_type", "expense")
@@ -244,7 +253,7 @@ CSV образец:
         else:
             # Standard Flat CSV Layout
             std = mapping.get("standard_mapping", {})
-            header_row_idx = std.get("header_row_index", 0)
+            # Use auto-detected header row index instead of Gemini guess
             date_idx = std.get("date_col_index", 0)
             amount_idx = std.get("amount_col_index", 1)
             category_idx = std.get("category_col_index", 2)
