@@ -81,19 +81,122 @@ def extract_google_sheets_id(text):
     match = re.search(r'docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]+)', text)
     return match.group(1) if match else None
 
-def import_google_sheet(spreadsheet_id, chat_id):
-    csv_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv"
-    req = urllib.request.Request(csv_url, headers={'User-Agent': 'Mozilla/5.0'})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            csv_bytes = resp.read()
-            csv_text = csv_bytes.decode('utf-8', errors='ignore')
+MONTH_MAP = {
+    "january": 1, "jan": 1, "январь": 1, "янв": 1,
+    "february": 2, "feb": 2, "февраль": 2, "февр": 2,
+    "march": 3, "mar": 3, "март": 3, "мар": 3,
+    "april": 4, "apr": 4, "апрель": 4, "апр": 4,
+    "may": 5, "май": 5,
+    "june": 6, "jun": 6, "июнь": 6, "июн": 6,
+    "july": 7, "jul": 7, "июль": 7, "июл": 7,
+    "august": 8, "aug": 8, "август": 8, "авг": 8,
+    "september": 9, "sep": 9, "сентябрь": 9, "сент": 9, "сеп": 9,
+    "october": 10, "oct": 10, "октябрь": 10, "окт": 10,
+    "november": 11, "nov": 11, "ноябрь": 11, "нояб": 11,
+    "december": 12, "dec": 12, "декабрь": 12, "дек": 12
+}
+
+def parse_sheet_date_context(sheet_name):
+    import re
+    from datetime import datetime
+    year_match = re.search(r'\b(20\d{2})\b', sheet_name)
+    year = int(year_match.group(1)) if year_match else datetime.now().year
+    
+    lower_name = sheet_name.lower()
+    month = 1
+    for k, v in MONTH_MAP.items():
+        if k in lower_name:
+            month = v
+            break
+    return year, month
+
+def parse_day_number(raw_date):
+    if not raw_date:
+        return None
+    clean = str(raw_date).strip().split('.')[0]
+    digits = "".join(filter(str.isdigit, clean))
+    if digits:
+        try:
+            day = int(digits)
+            if 1 <= day <= 31:
+                return day
+        except ValueError:
+            pass
+    return None
+
+def col_to_idx(col_str):
+    exp = 0
+    idx = 0
+    for char in reversed(col_str):
+        idx += (ord(char) - 64) * (26 ** exp)
+        exp += 1
+    return idx - 1
+
+def parse_worksheet_grid(xml_data, shared_strings, ns):
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml_data)
+    
+    rows_dict = {}
+    max_row = 0
+    max_col = 0
+    
+    for row_node in root.findall('.//ns:row', ns):
+        row_num = int(row_node.attrib.get('r', 1)) - 1
+        max_row = max(max_row, row_num)
+        
+        for c_node in row_node.findall('ns:c', ns):
+            ref = c_node.attrib.get('r', '')
+            if not ref:
+                continue
+                
+            col_letter = "".join(filter(str.isalpha, ref))
+            col_idx = col_to_idx(col_letter)
+            max_col = max(max_col, col_idx)
             
-            # If the response is HTML (Google Docs login/redirect screen), it's private!
-            if "<html" in csv_text.lower() or "google.com/accounts" in csv_text or "<!doctype" in csv_text.lower():
-                raise ValueError("Downloaded content is HTML instead of CSV (access denied)")
+            t = c_node.attrib.get('t', '')
+            v_node = c_node.find('ns:v', ns)
+            val = v_node.text if v_node is not None else ""
+            
+            if t == 's' and val:
+                try:
+                    str_idx = int(val)
+                    if str_idx < len(shared_strings):
+                        val = shared_strings[str_idx]
+                except ValueError:
+                    pass
+            elif t == 'b' and val:
+                val = "True" if val == "1" else "False"
+                
+            if row_num not in rows_dict:
+                rows_dict[row_num] = {}
+            rows_dict[row_num][col_idx] = val or ""
+            
+    grid = []
+    for r in range(max_row + 1):
+        row_data = []
+        row_cells = rows_dict.get(r, {})
+        for c in range(max_col + 1):
+            row_data.append(row_cells.get(c, ""))
+        grid.append(row_data)
+    return grid
+
+def import_google_sheet(spreadsheet_id, chat_id):
+    import zipfile
+    import io
+    import csv
+    from datetime import datetime
+    import xml.etree.ElementTree as ET
+    
+    xlsx_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
+    req = urllib.request.Request(xlsx_url, headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            xlsx_bytes = resp.read()
+            sample_text = xlsx_bytes[:1000].decode('utf-8', errors='ignore').lower()
+            if "<html" in sample_text or "google.com/accounts" in sample_text or "<!doctype" in sample_text:
+                raise ValueError("Downloaded content is HTML instead of XLSX (access denied)")
     except Exception as e:
-        print(f"[CSV Download Error] {e}")
+        print(f"[XLSX Download Error] {e}")
         return (
             "❌ Не удалось прочитать таблицу по ссылке.\n\n"
             "<b>Как исправить:</b>\n"
@@ -103,11 +206,67 @@ def import_google_sheet(spreadsheet_id, chat_id):
             "4. Отправьте ссылку еще раз!"
         )
 
-    # Use first 30 lines to identify structure
-    lines = csv_text.splitlines()
-    csv_sample = "\n".join(lines[:30])
-    
-    prompt = f"""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(xlsx_bytes))
+        
+        # 1. Parse shared strings
+        shared_strings = []
+        ns = {'ns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        if "xl/sharedStrings.xml" in z.namelist():
+            ss_data = z.read("xl/sharedStrings.xml")
+            ss_root = ET.fromstring(ss_data)
+            for t_node in ss_root.findall('.//ns:t', ns):
+                shared_strings.append(t_node.text or "")
+                
+        # 2. Parse workbook relationships
+        rels = {}
+        if "xl/_rels/workbook.xml.rels" in z.namelist():
+            rels_data = z.read("xl/_rels/workbook.xml.rels")
+            rels_root = ET.fromstring(rels_data)
+            r_ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+            for rel in rels_root.findall('.//r:Relationship', r_ns):
+                rid = rel.attrib.get('Id')
+                target = rel.attrib.get('Target')
+                rels[rid] = target
+                
+        # 3. Parse sheets list
+        wb_data = z.read("xl/workbook.xml")
+        wb_root = ET.fromstring(wb_data)
+        
+        sheet_files = []
+        for s_node in wb_root.findall('.//ns:sheet', ns):
+            name = s_node.attrib.get('name', '')
+            rid = s_node.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+            target_path = rels.get(rid, f"worksheets/sheet{s_node.attrib.get('sheetId')}.xml")
+            if not target_path.startswith('xl/'):
+                target_path = f"xl/{target_path}"
+            sheet_files.append((name, target_path))
+            
+        # 4. Filter sheet names (exclude templates and summaries)
+        valid_sheets = []
+        for s_name, s_path in sheet_files:
+            lower_name = s_name.lower()
+            if any(kw in lower_name for kw in ["заготовка", "template", "итог", "summary", "sheet1"]):
+                continue
+            valid_sheets.append((s_name, s_path))
+            
+        if not valid_sheets:
+            valid_sheets = sheet_files
+            
+        print(f"[Import] Valid sheets count to process: {len(valid_sheets)}")
+        
+        # 5. Extract first valid sheet to get layout mapping from Gemini
+        first_sheet_name, first_sheet_path = valid_sheets[0]
+        first_sheet_xml = z.read(first_sheet_path)
+        sample_grid = parse_worksheet_grid(first_sheet_xml, shared_strings, ns)
+        
+        sample_io = io.StringIO()
+        writer = csv.writer(sample_io)
+        writer.writerows(sample_grid[:30])
+        csv_sample = sample_io.getvalue()
+        
+        # Ask Gemini to map layout
+        prompt = f"""
 Ты — эксперт по анализу структуры CSV-файлов финансовых отчетов. Проанализируй этот образец CSV-данных и определи тип структуры.
 
 Бывает два типа структур:
@@ -144,11 +303,12 @@ CSV образец:
           {{ "col_index": number, "category": "название_категории" }}
         ]
       }}
-    ]
+    ]]
   }}
 }}
 """
-    try:
+        prompt = prompt.replace("]]", "]")
+        
         models_to_try = [
             'gemini-3.5-flash-lite', 
             'gemini-3.1-flash-lite', 
@@ -167,160 +327,182 @@ CSV образец:
                 break
             except Exception:
                 continue
-        
+                
         if not res:
             return "❌ Все ИИ-модели заняты. Пожалуйста, попробуйте импортировать файл чуть позже."
-
+            
         cleaned = clean_json_string(res.text)
         mapping = json.loads(cleaned)
-        print(f"[Import] Gemini mapping response: {mapping}")
-        
-        import csv
-        import io
-        from datetime import datetime
-        
-        f = io.StringIO(csv_text)
-        reader = csv.reader(f)
-        rows = list(reader)
-        print(f"[Import] Total CSV rows read: {len(rows)}")
-        
-        # Auto-detect header row index by scanning rows for headers keywords
-        header_row_idx = 0
-        for idx, r in enumerate(rows):
-            r_str = "".join(r).lower()
-            if any(k in r_str for k in ["дата", "date", "комментар", "comment", "сумма", "amount", "продукт", "авто"]):
-                header_row_idx = idx
-                break
-        print(f"[Import] Header row index auto-detected: {header_row_idx}")
-        
+        layout_type = mapping.get("layout_type", "standard")
+        print(f"[Import] Gemini mapping layout_type: {layout_type}")
         saved_count = 0
         skipped_count = 0
-        layout_type = mapping.get("layout_type", "standard")
-        print(f"[Import] Layout type determined: {layout_type}")
+        processed_sheets_count = 0
         
-        if layout_type == "category_columns":
-            tables = mapping.get("category_columns_mapping", {}).get("tables", [])
-            for table in tables:
-                # Use auto-detected header row index instead of Gemini guess
-                date_idx = table.get("date_col_index", 0)
-                desc_idx = table.get("description_col_index")
-                def_type = table.get("default_type", "expense")
-                cat_cols = table.get("category_columns", [])
+        # Clear existing transactions to prevent double import if user re-imports
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM transactions")
+        conn.commit()
+        conn.close()
+        
+        # 6. Parse all valid sheets
+        for s_name, s_path in valid_sheets:
+            sheet_xml = z.read(s_path)
+            rows = parse_worksheet_grid(sheet_xml, shared_strings, ns)
+            if len(rows) < 5:
+                continue
+                
+            processed_sheets_count += 1
+            sheet_year, sheet_month = parse_sheet_date_context(s_name)
+            
+            # Auto-detect header row index
+            header_row_idx = 0
+            for idx, r in enumerate(rows):
+                r_str = "".join(r).lower()
+                if any(k in r_str for k in ["дата", "date", "комментар", "comment", "сумма", "amount", "продукт", "авто"]):
+                    header_row_idx = idx
+                    break
+                    
+            if layout_type == "category_columns":
+                tables = mapping.get("category_columns_mapping", {}).get("tables", [])
+                for table in tables:
+                    date_idx = table.get("date_col_index", 0)
+                    desc_idx = table.get("description_col_index")
+                    def_type = table.get("default_type", "expense")
+                    cat_cols = table.get("category_columns", [])
+                    
+                    for i, r in enumerate(rows):
+                        if i <= header_row_idx:
+                            continue
+                        if not r or len(r) <= date_idx:
+                            continue
+                            
+                        raw_date = str(r[date_idx]).strip()
+                        if not raw_date:
+                            continue
+                            
+                        # Reconstruct full date using sheet context
+                        parsed_date = None
+                        if any(sep in raw_date for sep in [".", "-", "/"]) and len(raw_date) > 5:
+                            for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
+                                try:
+                                    parsed_date = datetime.strptime(raw_date, fmt)
+                                    break
+                                except ValueError:
+                                    continue
+                        else:
+                            day = parse_day_number(raw_date)
+                            if day:
+                                try:
+                                    parsed_date = datetime(year=sheet_year, month=sheet_month, day=day)
+                                except ValueError:
+                                    pass
+                                    
+                        if parsed_date:
+                            days_diff = (datetime.now() - parsed_date).days
+                            if days_diff > 730 or days_diff < 0:
+                                continue
+                            date_str = parsed_date.strftime("%Y-%m-%d")
+                        else:
+                            continue
+                            
+                        raw_desc = str(r[desc_idx]).strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+                        
+                        for cc in cat_cols:
+                            c_idx = cc.get("col_index")
+                            c_name = cc.get("category")
+                            if c_idx is not None and c_idx < len(r):
+                                raw_val = str(r[c_idx]).strip()
+                                if raw_val:
+                                    clean_val = raw_val.replace("$", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+                                    try:
+                                        amount = abs(float(clean_val))
+                                        if amount > 0:
+                                            save_transaction(def_type, amount, c_name, raw_desc or f"Импорт {s_name}", date_str)
+                                            saved_count += 1
+                                    except ValueError:
+                                        continue
+            else:
+                # Standard Flat CSV Layout
+                std = mapping.get("standard_mapping", {})
+                date_idx = std.get("date_col_index", 0)
+                amount_idx = std.get("amount_col_index", 1)
+                category_idx = std.get("category_col_index", 2)
+                desc_idx = std.get("description_col_index")
+                type_idx = std.get("type_col_index")
+                def_type = std.get("default_type", "expense")
                 
                 for i, r in enumerate(rows):
                     if i <= header_row_idx:
                         continue
-                    if not r or len(r) <= date_idx:
+                    if not r or len(r) <= max(date_idx, amount_idx, category_idx):
                         continue
                         
-                    raw_date = r[date_idx].strip()
-                    if not raw_date:
+                    raw_date = str(r[date_idx]).strip()
+                    raw_amount = str(r[amount_idx]).strip()
+                    raw_category = str(r[category_idx]).strip()
+                    raw_desc = str(r[desc_idx]).strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+                    
+                    if not raw_date or not raw_amount:
                         continue
                         
-                    # Parse date and filter for last 2 years
+                    clean_amt_str = raw_amount.replace("$", "").replace("€", "").replace("₽", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+                    try:
+                        amount = abs(float(clean_amt_str))
+                    except ValueError:
+                        skipped_count += 1
+                        continue
+                        
+                    tx_type = def_type
+                    if type_idx is not None and type_idx < len(r):
+                        val = str(r[type_idx]).strip().lower()
+                        if any(k in val for k in ["доход", "income", "salary", "зарплата", "плюс"]):
+                            tx_type = "income"
+                        elif any(k in val for k in ["расход", "expense", "трата", "минус"]):
+                            tx_type = "expense"
+                    elif "-" in clean_amt_str:
+                        tx_type = "expense"
+                    elif "+" in clean_amt_str:
+                        tx_type = "income"
+                        
                     parsed_date = None
-                    for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
-                        try:
-                            parsed_date = datetime.strptime(raw_date, fmt)
-                            break
-                        except ValueError:
-                            continue
-                            
+                    if any(sep in raw_date for sep in [".", "-", "/"]) and len(raw_date) > 5:
+                        for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
+                            try:
+                                parsed_date = datetime.strptime(raw_date, fmt)
+                                break
+                            except ValueError:
+                                continue
+                    else:
+                        day = parse_day_number(raw_date)
+                        if day:
+                            try:
+                                parsed_date = datetime(year=sheet_year, month=sheet_month, day=day)
+                            except ValueError:
+                                pass
+                                
                     if parsed_date:
                         days_diff = (datetime.now() - parsed_date).days
                         if days_diff > 730 or days_diff < 0:
                             continue
                         date_str = parsed_date.strftime("%Y-%m-%d")
                     else:
-                        continue  # Skip row if date is invalid
+                        date_str = datetime.now().strftime("%Y-%m-%d")
                         
-                    raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+                    category = raw_category or "прочее"
+                    description = raw_desc or f"Импорт {s_name}"
                     
-                    for cc in cat_cols:
-                        c_idx = cc.get("col_index")
-                        c_name = cc.get("category")
-                        if c_idx is not None and c_idx < len(r):
-                            raw_val = r[c_idx].strip()
-                            if raw_val:
-                                clean_val = raw_val.replace("$", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
-                                try:
-                                    amount = abs(float(clean_val))
-                                    if amount > 0:
-                                        save_transaction(def_type, amount, c_name, raw_desc or "Импорт Google Sheets")
-                                        saved_count += 1
-                                except ValueError:
-                                    continue
-        else:
-            # Standard Flat CSV Layout
-            std = mapping.get("standard_mapping", {})
-            # Use auto-detected header row index instead of Gemini guess
-            date_idx = std.get("date_col_index", 0)
-            amount_idx = std.get("amount_col_index", 1)
-            category_idx = std.get("category_col_index", 2)
-            desc_idx = std.get("description_col_index")
-            type_idx = std.get("type_col_index")
-            def_type = std.get("default_type", "expense")
-            
-            for i, r in enumerate(rows):
-                if i <= header_row_idx:
-                    continue
-                if not r or len(r) <= max(date_idx, amount_idx, category_idx):
-                    continue
+                    save_transaction(tx_type, amount, category, description, date_str)
+                    saved_count += 1
                     
-                raw_date = r[date_idx].strip()
-                raw_amount = r[amount_idx].strip()
-                raw_category = r[category_idx].strip()
-                raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
-                
-                if not raw_date or not raw_amount:
-                    continue
-                    
-                clean_amt_str = raw_amount.replace("$", "").replace("€", "").replace("₽", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
-                try:
-                    amount = abs(float(clean_amt_str))
-                except ValueError:
-                    skipped_count += 1
-                    continue
-                    
-                tx_type = def_type
-                if type_idx is not None and type_idx < len(r):
-                    val = r[type_idx].strip().lower()
-                    if any(k in val for k in ["доход", "income", "salary", "зарплата", "плюс"]):
-                        tx_type = "income"
-                    elif any(k in val for k in ["расход", "expense", "трата", "минус"]):
-                        tx_type = "expense"
-                elif "-" in clean_amt_str:
-                    tx_type = "expense"
-                elif "+" in clean_amt_str:
-                    tx_type = "income"
-                    
-                parsed_date = None
-                for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
-                    try:
-                        parsed_date = datetime.strptime(raw_date, fmt)
-                        break
-                    except ValueError:
-                        continue
-                        
-                if parsed_date:
-                    days_diff = (datetime.now() - parsed_date).days
-                    if days_diff > 730 or days_diff < 0:
-                        continue
-                    date_str = parsed_date.strftime("%Y-%m-%d")
-                else:
-                    date_str = datetime.now().strftime("%Y-%m-%d")
-                    
-                category = raw_category or "прочее"
-                description = raw_desc or "Импорт Google Sheets"
-                
-                save_transaction(tx_type, amount, category, description)
-                saved_count += 1
-                
-        print(f"[Import] Import completed. Saved: {saved_count}, Skipped: {skipped_count}")
-        return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> за последние 2 года из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
+        print(f"[Import] XLSX parsing complete. Processed {processed_sheets_count} sheets. Saved: {saved_count}, Skipped: {skipped_count}")
+        return f"✅ <b>Импорт завершен!</b>\n\nУспешно обработано <b>{processed_sheets_count} вкладок</b> и распознано <b>{saved_count} транзакций</b> за последние 2 года из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
     except Exception as e:
-        print(f"[CSV Parse Error] {e}")
-        return "❌ Не удалось распознать структуру таблицы. Убедитесь, что таблица содержит колонки с понятными названиями (например: Дата, Сумма, Категория, Описание)."
+        import traceback
+        traceback.print_exc()
+        print(f"[XLSX Parse Error] {e}")
+        return "❌ Не удалось распознать структуру таблиц в файле. Убедитесь, что листы содержат колонки с понятными названиями (например: Дата, Сумма, Категория, Описание)."
 
 def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
     if not genai_client:
@@ -565,10 +747,10 @@ def generate_pdf_report(filename="voicefinance_report.pdf"):
     return filename
 
 # Database helper functions
-def save_transaction(tx_type, amount, category, raw):
+def save_transaction(tx_type, amount, category, raw, custom_date=None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    date_str = datetime.now().strftime('%Y-%m-%d')
+    date_str = custom_date if custom_date else datetime.now().strftime('%Y-%m-%d')
     created_at = datetime.now().isoformat()
     cursor.execute('''
         INSERT INTO transactions (type, amount, currency, category, description, raw_voice, date, created_at)
