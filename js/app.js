@@ -11,6 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let transactions = [];
     let analyticsData = { income: 0, expense: 0, balance: 0, ratio: 0 };
+    
+    // Filter State
+    let filterMonth = 'all';
+    let filterCategory = 'all';
+    let filterSearch = '';
+    let filterDateCutoff = null;
 
     // DOM Elements
     const voiceBtn = document.getElementById('voiceBtn');
@@ -37,6 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnExportCSV = document.getElementById('btnExportCSV');
     const btnExportPDF = document.getElementById('btnExportPDF');
+    
+    // Filter DOM Elements
+    const filterMonthEl = document.getElementById('filterMonth');
+    const filterCategoryEl = document.getElementById('filterCategory');
+    const filterSearchEl = document.getElementById('filterSearch');
 
     // Initialize Voice Engine
     voiceEngine = new VoiceEngine({
@@ -167,7 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('[App] Server unreachable, using local storage.');
             transactions = JSON.parse(localStorage.getItem('vf_txs') || '[]');
         }
-        updateUI();
+        populateFilterOptions();
+        parseQueryParameters();
+        filterAndRender();
     }
 
     async function addTransaction(txData) {
@@ -196,7 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         transactions.unshift(createdTx);
         localStorage.setItem('vf_txs', JSON.stringify(transactions));
-        updateUI();
+        populateFilterOptions();
+        filterAndRender();
         return createdTx;
     }
 
@@ -207,19 +221,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         transactions = transactions.filter(t => t.id !== id);
         localStorage.setItem('vf_txs', JSON.stringify(transactions));
-        updateUI();
+        populateFilterOptions();
+        filterAndRender();
         showToast('Запись удалена', 'info');
     }
 
-    /**
-     * UI Update Orchestrator
-     */
-    function updateUI() {
+    function updateUI(dataList = transactions) {
         // Calculate Totals
         let income = 0;
         let expense = 0;
 
-        transactions.forEach(t => {
+        dataList.forEach(t => {
             const val = parseFloat(t.amount) || 0;
             if (t.type === 'income') income += val;
             else expense += val;
@@ -241,8 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
         else metricRatioText.innerText = 'Внимание: расходы превышают доходы';
 
         // Render Transactions List
-        txCount.innerText = `${transactions.length} записей`;
-        if (transactions.length === 0) {
+        txCount.innerText = `${dataList.length} записей`;
+        if (dataList.length === 0) {
             txList.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon"><i class="fa-solid fa-microphone-slash"></i></div>
@@ -250,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         } else {
-            txList.innerHTML = transactions.map(t => `
+            txList.innerHTML = dataList.map(t => `
                 <div class="tx-item">
                     <div class="tx-left">
                         <div class="tx-icon ${t.type === 'income' ? 'icon-income' : 'icon-expense'}">
@@ -274,28 +286,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Render Category Charts
-        const categoryTotals = calculateCategoryTotals();
+        const categoryTotals = calculateCategoryTotals(dataList);
         charts.renderCategoryChart('categoryChart', categoryTotals);
 
         // Render Trend Chart
-        const monthlyData = calculateMonthlyTrends();
+        const monthlyData = calculateMonthlyTrends(dataList);
         charts.renderTrendChart('trendChart', monthlyData);
     }
 
-    function calculateCategoryTotals() {
+    function calculateCategoryTotals(dataList = transactions) {
         const totals = {};
-        transactions.filter(t => t.type === 'expense').forEach(t => {
+        dataList.filter(t => t.type === 'expense').forEach(t => {
             const cat = t.category || 'прочее';
             totals[cat] = (totals[cat] || 0) + (parseFloat(t.amount) || 0);
         });
         return totals;
     }
 
-    function calculateMonthlyTrends() {
+    function calculateMonthlyTrends(dataList = transactions) {
         const monthsMap = {};
         const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
-        transactions.forEach(t => {
+        dataList.forEach(t => {
             const dateObj = new Date(t.date || Date.now());
             const mKey = `${monthNames[dateObj.getMonth()]}`;
             if (!monthsMap[mKey]) monthsMap[mKey] = { month: mKey, income: 0, expense: 0 };
@@ -318,6 +330,136 @@ document.addEventListener('DOMContentLoaded', () => {
             { label: 'Текущий месяц', value: calculateCategoryTotals()[categoryName] || 50 }
         ];
         charts.renderCompareChart('compareChart', categoryName, sampleData);
+    }
+
+    function populateFilterOptions() {
+        if (!filterMonthEl || !filterCategoryEl) return;
+        
+        const prevMonth = filterMonthEl.value;
+        const prevCategory = filterCategoryEl.value;
+        
+        filterMonthEl.innerHTML = '<option value="all">Все месяцы</option>';
+        filterCategoryEl.innerHTML = '<option value="all">Все категории</option>';
+        
+        const uniqueMonths = {};
+        const monthDisplayNames = {
+            '01': 'Январь', '02': 'Февраль', '03': 'Март', '04': 'Апрель',
+            '05': 'Май', '06': 'Июнь', '07': 'Июль', '08': 'Август',
+            '09': 'Сентябрь', '10': 'Октябрь', '11': 'Ноябрь', '12': 'Декабрь'
+        };
+        
+        const uniqueCategories = new Set();
+        
+        transactions.forEach(t => {
+            if (t.date && t.date.length >= 7) {
+                const yyyy_mm = t.date.substring(0, 7);
+                const [year, month] = yyyy_mm.split('-');
+                if (monthDisplayNames[month]) {
+                    const displayName = `${monthDisplayNames[month]} ${year}`;
+                    uniqueMonths[yyyy_mm] = displayName;
+                }
+            }
+            if (t.category) {
+                uniqueCategories.add(t.category.toLowerCase());
+            }
+        });
+        
+        const sortedMonths = Object.keys(uniqueMonths).sort().reverse();
+        sortedMonths.forEach(yyyy_mm => {
+            const opt = document.createElement('option');
+            opt.value = yyyy_mm;
+            opt.textContent = uniqueMonths[yyyy_mm];
+            filterMonthEl.appendChild(opt);
+        });
+        
+        const sortedCategories = Array.from(uniqueCategories).sort();
+        sortedCategories.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat;
+            filterCategoryEl.appendChild(opt);
+        });
+        
+        if (Array.from(filterMonthEl.options).some(o => o.value === prevMonth)) {
+            filterMonthEl.value = prevMonth;
+        }
+        if (Array.from(filterCategoryEl.options).some(o => o.value === prevCategory)) {
+            filterCategoryEl.value = prevCategory;
+        }
+    }
+
+    function parseQueryParameters() {
+        const params = new URLSearchParams(window.location.search);
+        
+        const qCategory = params.get('category');
+        if (qCategory && filterCategoryEl) {
+            filterCategory = qCategory.toLowerCase();
+            // Add custom category option to dropdown if it's not present yet
+            const hasOption = Array.from(filterCategoryEl.options).some(o => o.value === filterCategory);
+            if (!hasOption) {
+                const opt = document.createElement('option');
+                opt.value = filterCategory;
+                opt.textContent = filterCategory;
+                filterCategoryEl.appendChild(opt);
+            }
+            filterCategoryEl.value = filterCategory;
+        }
+        
+        const qMonthsCount = params.get('months');
+        if (qMonthsCount) {
+            const monthsVal = parseInt(qMonthsCount);
+            if (!isNaN(monthsVal)) {
+                const cutoff = new Date();
+                cutoff.setMonth(cutoff.getMonth() - monthsVal);
+                filterDateCutoff = cutoff.toISOString().substring(0, 10);
+            }
+        }
+    }
+
+    function filterAndRender() {
+        let filtered = transactions;
+        
+        if (filterCategory && filterCategory !== 'all') {
+            filtered = filtered.filter(t => (t.category || '').toLowerCase() === filterCategory.toLowerCase());
+        }
+        
+        if (filterMonth && filterMonth !== 'all') {
+            filtered = filtered.filter(t => t.date && t.date.substring(0, 7) === filterMonth);
+        }
+        
+        if (filterDateCutoff) {
+            filtered = filtered.filter(t => t.date && t.date >= filterDateCutoff);
+        }
+        
+        if (filterSearch) {
+            const query = filterSearch.toLowerCase();
+            filtered = filtered.filter(t => 
+                (t.description || '').toLowerCase().includes(query) || 
+                (t.category || '').toLowerCase().includes(query)
+            );
+        }
+        
+        updateUI(filtered);
+    }
+
+    if (filterMonthEl) {
+        filterMonthEl.addEventListener('change', (e) => {
+            filterMonth = e.target.value;
+            filterDateCutoff = null; // Clear URL query constraints on manual interaction
+            filterAndRender();
+        });
+    }
+    if (filterCategoryEl) {
+        filterCategoryEl.addEventListener('change', (e) => {
+            filterCategory = e.target.value;
+            filterAndRender();
+        });
+    }
+    if (filterSearchEl) {
+        filterSearchEl.addEventListener('input', (e) => {
+            filterSearch = e.target.value;
+            filterAndRender();
+        });
     }
 
     // Modal & Form Handlers

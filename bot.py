@@ -520,6 +520,7 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
 Твоя задача:
 1. Если пользователь задает общий вопрос (о науке, жизни, Эвересте, спорте, коде), поставь intent="CHAT", а в поле "ai_reply" напиши максимально подробный, развернутый, интересный и структурированный ответ со всеми деталями. Ответ не должен быть сухим или коротким!
 2. Если в реплике есть финансовое действие (расход, доход, исправление, отчет), извлеки параметры в соответствующие поля JSON, а в "ai_reply" дай теплый дружеский комментарий.
+3. Если пользователь просит найти или показать расходы/доходы за период времени или по определенной категории (например, "расходы на автомобиль за последние 2 месяца", "сколько ушло на еду за полгода"), поставь intent="QUERY_TX", извлеки категорию в "query_category", а период в месяцах в "query_months_count".
 
 Текущее состояние счета: Доходы=${income}, Расходы=${expense}, Чистый остаток=${balance}
 История реплик: {history_str}
@@ -528,12 +529,14 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
 Верни СТРОГО чистый JSON формата:
 {{
   "transcribed_text": "Точная расшифровка реплики пользователя",
-  "intent": "ADD_TX" | "CORRECT_LAST" | "DELETE_LAST" | "QUERY_BALANCE" | "EXPORT_PDF" | "CHAT",
+  "intent": "ADD_TX" | "CORRECT_LAST" | "DELETE_LAST" | "QUERY_BALANCE" | "EXPORT_PDF" | "QUERY_TX" | "CHAT",
   "type": "expense" | "income",
   "amount": number_or_null,
   "category": "продукты" | "бензин" | "транспорт" | "коммунальные" | "кредиты" | "развлечения" | "бизнес" | "кафе и рестораны" | "здоровье" | "зарплата" | "фриланс" | "прочее",
   "new_amount": number_or_null,
   "new_category": string_or_null,
+  "query_category": string_or_null,
+  "query_months_count": number_or_null,
   "ai_reply": "Твой ответ. Если вопрос сложный или просветительский — распиши его подробно, по шагам, с эмодзи!"
 }}
 """
@@ -932,6 +935,56 @@ class TelegramBot:
                 income, expense, balance = get_analytics()
                 full_reply = f"{prefix}🗑️ {ai_reply}\n\n💳 <b>Баланс: ${balance:,.2f}</b>"
                 self.send_message(chat_id, full_reply)
+                return
+
+            elif intent == 'QUERY_TX':
+                q_cat = gemini_res.get('query_category')
+                q_months = gemini_res.get('query_months_count')
+                
+                months_val = int(q_months) if q_months else None
+                cat_val = str(q_cat).strip().lower() if q_cat else None
+                
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                sql = "SELECT SUM(amount) FROM transactions WHERE type='expense'"
+                params = []
+                
+                if cat_val:
+                    sql += " AND LOWER(category) LIKE ?"
+                    params.append(f"%{cat_val}%")
+                if months_val:
+                    sql += " AND date >= date('now', ?)"
+                    params.append(f"-{months_val} month")
+                    
+                cursor.execute(sql, params)
+                res_sum = cursor.fetchone()[0] or 0.0
+                conn.close()
+                
+                desc_period = f"за последние {months_val} мес." if months_val else "за всё время"
+                desc_category = f"на категорию «{cat_val.capitalize()}»" if cat_val else "на все расходы"
+                
+                web_link = "https://voicefinance.onrender.com"
+                query_params = []
+                if cat_val:
+                    query_params.append(f"category={urllib.parse.quote(cat_val)}")
+                if months_val:
+                    query_params.append(f"months={months_val}")
+                if query_params:
+                    web_link += "?" + "&".join(query_params)
+                    
+                reply_markup = {
+                    "inline_keyboard": [[
+                        {"text": "📊 Посмотреть в WebApp", "web_app": {"url": web_link}}
+                    ]]
+                }
+                
+                ans_text = (
+                    f"{prefix}📊 <b>Анализ расходов</b> {desc_period}:\n\n"
+                    f"💸 Сумма {desc_category}: <b>${res_sum:,.2f}</b>\n\n"
+                    f"<i>{ai_reply}</i>\n\n"
+                    f"Перейдите по кнопке ниже, чтобы посмотреть детальный список и графики в веб-приложении."
+                )
+                self.send_message(chat_id, ans_text, reply_markup=reply_markup)
                 return
 
             else:

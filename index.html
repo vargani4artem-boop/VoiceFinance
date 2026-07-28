@@ -136,6 +136,19 @@
                     <span style="font-size: 0.8rem; color: var(--text-muted);" id="txCount">0 записей</span>
                 </div>
                 
+                <div class="filter-bar">
+                    <select class="form-select-sm" id="filterMonth">
+                        <option value="all">Все месяцы</option>
+                    </select>
+                    <select class="form-select-sm" id="filterCategory">
+                        <option value="all">Все категории</option>
+                    </select>
+                    <div class="search-input-wrapper">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" class="form-input-sm" id="filterSearch" placeholder="Поиск по описанию...">
+                    </div>
+                </div>
+                
                 <div class="tx-list" id="txList">
                     <div class="empty-state">
                         <div class="empty-icon"><i class="fa-solid fa-microphone-slash"></i></div>
