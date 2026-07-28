@@ -103,30 +103,25 @@ def import_google_sheet(spreadsheet_id, chat_id):
             "4. Отправьте ссылку еще раз!"
         )
 
-    # Extract first 100 lines
-    lines = csv_text.splitlines()[:100]
-    csv_sample = "\n".join(lines)
+    # Use first 30 lines to identify structure
+    lines = csv_text.splitlines()
+    csv_sample = "\n".join(lines[:30])
     
     prompt = f"""
-Ты — финансовый импортёр. Проанализируй этот CSV-текст из Google Таблиц пользователя. 
-Определи колонки даты, категории, суммы и описания.
-Извлеки все строки расходов и доходов.
+Ты — эксперт по анализу структуры CSV-файлов. Проанализируй этот образец CSV-данных и определи индексы колонок (0-indexed).
 
-CSV данные:
+CSV образец:
 {csv_sample}
 
-Верни СТРОГО чистый JSON формата:
+Верни СТРОГО чистый JSON следующего формата (без markdown оберток, только JSON):
 {{
-  "success": true,
-  "transactions": [
-    {{
-      "type": "expense" | "income",
-      "amount": number,
-      "category": "продукты" | "бензин" | "транспорт" | "коммунальные" | "кредиты" | "развлечения" | "бизнес" | "кафе и рестораны" | "здоровье" | "зарплата" | "фриланс" | "прочее",
-      "description": string,
-      "date": "YYYY-MM-DD"
-    }}
-  ]
+  "header_row_index": number,      // Строка заголовков (обычно содержит названия колонок вроде Дата, Категория, Сумма)
+  "date_col_index": number,        // Колонка даты
+  "amount_col_index": number,      // Колонка суммы (числовой показатель)
+  "category_col_index": number,    // Колонка категории (продукты, жилье, бензин)
+  "description_col_index": number,  // Колонка описания/комментария (или null, если нет)
+  "type_col_index": number | null, // Колонка типа транзакции (доход/расход, или null если нет такой колонки)
+  "default_type": "expense" | "income" // Тип по умолчанию, если нет колонки типа
 }}
 """
     try:
@@ -153,23 +148,89 @@ CSV данные:
             return "❌ Все ИИ-модели заняты. Пожалуйста, попробуйте импортировать файл чуть позже."
 
         cleaned = clean_json_string(res.text)
-        data = json.loads(cleaned)
+        mapping = json.loads(cleaned)
         
-        txs = data.get('transactions', [])
+        import csv
+        import io
+        from datetime import datetime
+        
+        header_row_idx = mapping.get("header_row_index", 0)
+        date_idx = mapping.get("date_col_index", 0)
+        amount_idx = mapping.get("amount_col_index", 1)
+        category_idx = mapping.get("category_col_index", 2)
+        desc_idx = mapping.get("description_col_index")
+        type_idx = mapping.get("type_col_index")
+        def_type = mapping.get("default_type", "expense")
+        
+        f = io.StringIO(csv_text)
+        reader = csv.reader(f)
+        rows = list(reader)
+        
         saved_count = 0
-        for t in txs:
-            if t.get('amount'):
-                save_transaction(
-                    t.get('type', 'expense'),
-                    t.get('amount'),
-                    t.get('category', 'прочее'),
-                    t.get('description', t.get('description') or 'Импорт Google Sheets')
-                )
-                saved_count += 1
+        skipped_count = 0
         
-        return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
+        for i, r in enumerate(rows):
+            if i <= header_row_idx:
+                continue
+            if not r or len(r) <= max(date_idx, amount_idx, category_idx):
+                continue
+                
+            raw_date = r[date_idx].strip()
+            raw_amount = r[amount_idx].strip()
+            raw_category = r[category_idx].strip()
+            raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+            
+            if not raw_date or not raw_amount:
+                continue
+                
+            # Parse amount: remove spaces, symbols, handle commas
+            clean_amt_str = raw_amount.replace("$", "").replace("€", "").replace("₽", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+            try:
+                amount = abs(float(clean_amt_str))
+            except ValueError:
+                skipped_count += 1
+                continue
+                
+            # Determine type
+            tx_type = def_type
+            if type_idx is not None and type_idx < len(r):
+                val = r[type_idx].strip().lower()
+                if any(k in val for k in ["доход", "income", "salary", "зарплата", "плюс"]):
+                    tx_type = "income"
+                elif any(k in val for k in ["расход", "expense", "трата", "минус"]):
+                    tx_type = "expense"
+            elif "-" in clean_amt_str:
+                tx_type = "expense"
+            elif "+" in clean_amt_str:
+                tx_type = "income"
+                
+            # Parse date and check 2 years filter
+            parsed_date = None
+            for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
+                try:
+                    parsed_date = datetime.strptime(raw_date, fmt)
+                    break
+                except ValueError:
+                    continue
+                    
+            if parsed_date:
+                # Filter last 2 years (2 * 365 = 730 days)
+                days_diff = (datetime.now() - parsed_date).days
+                if days_diff > 730 or days_diff < 0:
+                    continue
+                date_str = parsed_date.strftime("%Y-%m-%d")
+            else:
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                
+            category = raw_category or "прочее"
+            description = raw_desc or "Импорт Google Sheets"
+            
+            save_transaction(tx_type, amount, category, description)
+            saved_count += 1
+            
+        return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> за последние 2 года из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
     except Exception as e:
-        print(f"[Gemini CSV Parse Error] {e}")
+        print(f"[CSV Parse Error] {e}")
         return "❌ Не удалось распознать структуру таблицы. Убедитесь, что таблица содержит колонки с понятными названиями (например: Дата, Сумма, Категория, Описание)."
 
 def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
