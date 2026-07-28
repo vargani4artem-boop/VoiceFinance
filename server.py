@@ -8,6 +8,24 @@ from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
+# Redirect stdout and stderr to app.log
+class TeeLogger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, "a", encoding="utf-8", buffering=1)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+LOG_FILE = os.path.join(os.path.dirname(__file__), "app.log")
+sys.stdout = TeeLogger(LOG_FILE)
+sys.stderr = TeeLogger(LOG_FILE)
+
 DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 PORT = int(os.environ.get("PORT", 8000))
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
@@ -86,8 +104,28 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
+        elif parsed.path == '/api/logs':
+            self.get_logs()
         else:
             super().do_GET()
+
+    def get_logs(self):
+        try:
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                log_content = "".join(lines[-150:])
+            else:
+                log_content = "Log file not found."
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(log_content.encode('utf-8'))
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(f"Failed to read logs: {e}".encode('utf-8'))
 
     def do_POST(self):
         parsed = urlparse(self.path)
