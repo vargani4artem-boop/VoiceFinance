@@ -141,8 +141,31 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.add_transaction(data)
         elif parsed.path == '/api/categories':
             self.add_category(data)
+        elif parsed.path == '/api/telegram-webhook':
+            self.handle_telegram_webhook(data)
         else:
             self.send_error(404, "Endpoint not found")
+
+    def handle_telegram_webhook(self, update):
+        global BOT_STATUS
+        try:
+            import bot
+            telegram_bot = bot.TelegramBot(bot.TOKEN)
+            
+            # Track update details
+            msg = update.get('message', {})
+            BOT_STATUS["last_update_received"] = datetime.now().isoformat()
+            BOT_STATUS["last_update_id"] = update.get('update_id')
+            BOT_STATUS["last_chat_id"] = msg.get('chat', {}).get('id') if msg else None
+            BOT_STATUS["last_text_received"] = msg.get('text') or ("Voice message" if msg.get('voice') else None) if msg else None
+            
+            # Process update asynchronously in a daemon thread so we can reply 200 OK to Telegram immediately
+            threading.Thread(target=telegram_bot.handle_update, args=(update,), daemon=True).start()
+            
+            self.send_json({'success': True})
+        except Exception as e:
+            print(f"[Webhook Error] {e}")
+            self.send_json({'success': False, 'error': str(e)}, status=500)
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
@@ -337,13 +360,32 @@ def start_telegram_bot():
         BOT_STATUS["error"] = str(e)
 
 
+def setup_webhook():
+    webhook_url = "https://voicefinance.onrender.com/api/telegram-webhook"
+    url = f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={webhook_url}"
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as resp:
+            res = json.loads(resp.read().decode('utf-8'))
+            print("[Webhook] setWebhook response:", res)
+    except Exception as e:
+        print("[Webhook] Failed to set webhook:", e)
+
+
 def run_server():
     init_db()
     os.chdir(os.path.dirname(__file__))
     
-    # Start Telegram Bot in daemon thread
-    bot_thread = threading.Thread(target=start_telegram_bot, daemon=True)
-    bot_thread.start()
+    # Use Webhook in production (Render has RENDER or PORT != 8000), otherwise Polling
+    if os.environ.get("RENDER") or PORT != 8000:
+        print("[Server] Production environment detected. Setting up Telegram Webhook...")
+        setup_webhook()
+        BOT_STATUS["status"] = "webhook_active"
+    else:
+        print("[Server] Local environment detected. Starting polling thread...")
+        bot_thread = threading.Thread(target=start_telegram_bot, daemon=True)
+        bot_thread.start()
 
     server_address = ('', PORT)
     httpd = HTTPServer(server_address, VoiceFinanceHandler)
