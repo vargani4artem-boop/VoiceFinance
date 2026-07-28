@@ -173,6 +173,7 @@ CSV образец:
 
         cleaned = clean_json_string(res.text)
         mapping = json.loads(cleaned)
+        print(f"[Import] Gemini mapping response: {mapping}")
         
         import csv
         import io
@@ -181,10 +182,12 @@ CSV образец:
         f = io.StringIO(csv_text)
         reader = csv.reader(f)
         rows = list(reader)
+        print(f"[Import] Total CSV rows read: {len(rows)}")
         
         saved_count = 0
         skipped_count = 0
         layout_type = mapping.get("layout_type", "standard")
+        print(f"[Import] Layout type determined: {layout_type}")
         
         if layout_type == "category_columns":
             tables = mapping.get("category_columns_mapping", {}).get("tables", [])
@@ -304,6 +307,7 @@ CSV образец:
                 save_transaction(tx_type, amount, category, description)
                 saved_count += 1
                 
+        print(f"[Import] Import completed. Saved: {saved_count}, Skipped: {skipped_count}")
         return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> за последние 2 года из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
     except Exception as e:
         print(f"[CSV Parse Error] {e}")
