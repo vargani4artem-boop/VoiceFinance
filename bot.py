@@ -88,6 +88,10 @@ def import_google_sheet(spreadsheet_id, chat_id):
         with urllib.request.urlopen(req, timeout=10) as resp:
             csv_bytes = resp.read()
             csv_text = csv_bytes.decode('utf-8', errors='ignore')
+            
+            # If the response is HTML (Google Docs login/redirect screen), it's private!
+            if "<html" in csv_text.lower() or "google.com/accounts" in csv_text or "<!doctype" in csv_text.lower():
+                raise ValueError("Downloaded content is HTML instead of CSV (access denied)")
     except Exception as e:
         print(f"[CSV Download Error] {e}")
         return (
