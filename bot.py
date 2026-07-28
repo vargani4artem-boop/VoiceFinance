@@ -108,20 +108,44 @@ def import_google_sheet(spreadsheet_id, chat_id):
     csv_sample = "\n".join(lines[:30])
     
     prompt = f"""
-Ты — эксперт по анализу структуры CSV-файлов. Проанализируй этот образец CSV-данных и определи индексы колонок (0-indexed).
+Ты — эксперт по анализу структуры CSV-файлов финансовых отчетов. Проанализируй этот образец CSV-данных и определи тип структуры.
+
+Бывает два типа структур:
+1. "standard": Одна плоская таблица, где для каждой транзакции есть колонка Даты, Суммы, Категории и Описания.
+2. "category_columns": Сложная таблица (например, совместный учет), где категории представлены отдельными колонками, а значения в этих колонках — это суммы расходов. Также могут быть две такие таблицы бок о бок (например, расходы Артема и расходы Максима).
 
 CSV образец:
 {csv_sample}
 
 Верни СТРОГО чистый JSON следующего формата (без markdown оберток, только JSON):
 {{
-  "header_row_index": number,      // Строка заголовков (обычно содержит названия колонок вроде Дата, Категория, Сумма)
-  "date_col_index": number,        // Колонка даты
-  "amount_col_index": number,      // Колонка суммы (числовой показатель)
-  "category_col_index": number,    // Колонка категории (продукты, жилье, бензин)
-  "description_col_index": number,  // Колонка описания/комментария (или null, если нет)
-  "type_col_index": number | null, // Колонка типа транзакции (доход/расход, или null если нет такой колонки)
-  "default_type": "expense" | "income" // Тип по умолчанию, если нет колонки типа
+  "layout_type": "standard" | "category_columns",
+  
+  // Если layout_type = "standard":
+  "standard_mapping": {{
+    "header_row_index": number,      // Строка заголовков
+    "date_col_index": number,        // Колонка даты
+    "amount_col_index": number,      // Колонка суммы
+    "category_col_index": number,    // Колонка категории
+    "description_col_index": number | null,
+    "type_col_index": number | null,
+    "default_type": "expense" | "income"
+  }},
+  
+  // Если layout_type = "category_columns":
+  "category_columns_mapping": {{
+    "tables": [                      // Список таблиц (если их несколько бок о бок, опиши обе)
+      {{
+        "header_row_index": number,  // Строка заголовков таблицы
+        "date_col_index": number,    // Индекс колонки даты для этой таблицы
+        "description_col_index": number | null, // Индекс колонки комментариев/описания
+        "default_type": "expense",
+        "category_columns": [        // Список колонок с категориями расходов
+          {{ "col_index": number, "category": "название_категории" }}
+        ]
+      }}
+    ]
+  }}
 }}
 """
     try:
@@ -154,80 +178,132 @@ CSV образец:
         import io
         from datetime import datetime
         
-        header_row_idx = mapping.get("header_row_index", 0)
-        date_idx = mapping.get("date_col_index", 0)
-        amount_idx = mapping.get("amount_col_index", 1)
-        category_idx = mapping.get("category_col_index", 2)
-        desc_idx = mapping.get("description_col_index")
-        type_idx = mapping.get("type_col_index")
-        def_type = mapping.get("default_type", "expense")
-        
         f = io.StringIO(csv_text)
         reader = csv.reader(f)
         rows = list(reader)
         
         saved_count = 0
         skipped_count = 0
+        layout_type = mapping.get("layout_type", "standard")
         
-        for i, r in enumerate(rows):
-            if i <= header_row_idx:
-                continue
-            if not r or len(r) <= max(date_idx, amount_idx, category_idx):
-                continue
+        if layout_type == "category_columns":
+            tables = mapping.get("category_columns_mapping", {}).get("tables", [])
+            for table in tables:
+                header_row_idx = table.get("header_row_index", 0)
+                date_idx = table.get("date_col_index", 0)
+                desc_idx = table.get("description_col_index")
+                def_type = table.get("default_type", "expense")
+                cat_cols = table.get("category_columns", [])
                 
-            raw_date = r[date_idx].strip()
-            raw_amount = r[amount_idx].strip()
-            raw_category = r[category_idx].strip()
-            raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+                for i, r in enumerate(rows):
+                    if i <= header_row_idx:
+                        continue
+                    if not r or len(r) <= date_idx:
+                        continue
+                        
+                    raw_date = r[date_idx].strip()
+                    if not raw_date:
+                        continue
+                        
+                    # Parse date and filter for last 2 years
+                    parsed_date = None
+                    for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
+                        try:
+                            parsed_date = datetime.strptime(raw_date, fmt)
+                            break
+                        except ValueError:
+                            continue
+                            
+                    if parsed_date:
+                        days_diff = (datetime.now() - parsed_date).days
+                        if days_diff > 730 or days_diff < 0:
+                            continue
+                        date_str = parsed_date.strftime("%Y-%m-%d")
+                    else:
+                        continue  # Skip row if date is invalid
+                        
+                    raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
+                    
+                    for cc in cat_cols:
+                        c_idx = cc.get("col_index")
+                        c_name = cc.get("category")
+                        if c_idx is not None and c_idx < len(r):
+                            raw_val = r[c_idx].strip()
+                            if raw_val:
+                                clean_val = raw_val.replace("$", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+                                try:
+                                    amount = abs(float(clean_val))
+                                    if amount > 0:
+                                        save_transaction(def_type, amount, c_name, raw_desc or "Импорт Google Sheets")
+                                        saved_count += 1
+                                except ValueError:
+                                    continue
+        else:
+            # Standard Flat CSV Layout
+            std = mapping.get("standard_mapping", {})
+            header_row_idx = std.get("header_row_index", 0)
+            date_idx = std.get("date_col_index", 0)
+            amount_idx = std.get("amount_col_index", 1)
+            category_idx = std.get("category_col_index", 2)
+            desc_idx = std.get("description_col_index")
+            type_idx = std.get("type_col_index")
+            def_type = std.get("default_type", "expense")
             
-            if not raw_date or not raw_amount:
-                continue
-                
-            # Parse amount: remove spaces, symbols, handle commas
-            clean_amt_str = raw_amount.replace("$", "").replace("€", "").replace("₽", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
-            try:
-                amount = abs(float(clean_amt_str))
-            except ValueError:
-                skipped_count += 1
-                continue
-                
-            # Determine type
-            tx_type = def_type
-            if type_idx is not None and type_idx < len(r):
-                val = r[type_idx].strip().lower()
-                if any(k in val for k in ["доход", "income", "salary", "зарплата", "плюс"]):
-                    tx_type = "income"
-                elif any(k in val for k in ["расход", "expense", "трата", "минус"]):
-                    tx_type = "expense"
-            elif "-" in clean_amt_str:
-                tx_type = "expense"
-            elif "+" in clean_amt_str:
-                tx_type = "income"
-                
-            # Parse date and check 2 years filter
-            parsed_date = None
-            for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
-                try:
-                    parsed_date = datetime.strptime(raw_date, fmt)
-                    break
-                except ValueError:
+            for i, r in enumerate(rows):
+                if i <= header_row_idx:
+                    continue
+                if not r or len(r) <= max(date_idx, amount_idx, category_idx):
                     continue
                     
-            if parsed_date:
-                # Filter last 2 years (2 * 365 = 730 days)
-                days_diff = (datetime.now() - parsed_date).days
-                if days_diff > 730 or days_diff < 0:
-                    continue
-                date_str = parsed_date.strftime("%Y-%m-%d")
-            else:
-                date_str = datetime.now().strftime("%Y-%m-%d")
+                raw_date = r[date_idx].strip()
+                raw_amount = r[amount_idx].strip()
+                raw_category = r[category_idx].strip()
+                raw_desc = r[desc_idx].strip() if (desc_idx is not None and desc_idx < len(r)) else ""
                 
-            category = raw_category or "прочее"
-            description = raw_desc or "Импорт Google Sheets"
-            
-            save_transaction(tx_type, amount, category, description)
-            saved_count += 1
-            
+                if not raw_date or not raw_amount:
+                    continue
+                    
+                clean_amt_str = raw_amount.replace("$", "").replace("€", "").replace("₽", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+                try:
+                    amount = abs(float(clean_amt_str))
+                except ValueError:
+                    skipped_count += 1
+                    continue
+                    
+                tx_type = def_type
+                if type_idx is not None and type_idx < len(r):
+                    val = r[type_idx].strip().lower()
+                    if any(k in val for k in ["доход", "income", "salary", "зарплата", "плюс"]):
+                        tx_type = "income"
+                    elif any(k in val for k in ["расход", "expense", "трата", "минус"]):
+                        tx_type = "expense"
+                elif "-" in clean_amt_str:
+                    tx_type = "expense"
+                elif "+" in clean_amt_str:
+                    tx_type = "income"
+                    
+                parsed_date = None
+                for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"]:
+                    try:
+                        parsed_date = datetime.strptime(raw_date, fmt)
+                        break
+                    except ValueError:
+                        continue
+                        
+                if parsed_date:
+                    days_diff = (datetime.now() - parsed_date).days
+                    if days_diff > 730 or days_diff < 0:
+                        continue
+                    date_str = parsed_date.strftime("%Y-%m-%d")
+                else:
+                    date_str = datetime.now().strftime("%Y-%m-%d")
+                    
+                category = raw_category or "прочее"
+                description = raw_desc or "Импорт Google Sheets"
+                
+                save_transaction(tx_type, amount, category, description)
+                saved_count += 1
+                
         return f"✅ <b>Импорт завершен!</b>\n\nУспешно перенесено и распознано <b>{saved_count} транзакций</b> за последние 2 года из вашей Google Таблицы. Вы можете увидеть их на графиках в веб-приложении!"
     except Exception as e:
         print(f"[CSV Parse Error] {e}")
