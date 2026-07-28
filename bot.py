@@ -667,10 +667,28 @@ class TelegramBot:
         return self.send_request('sendMessage', payload)
 
     def process_ai_result(self, chat_id, gemini_res, raw_input="сообщение"):
-        # Check if the raw input contains a Google Sheet URL first!
+        # Search for a Google Sheet URL in raw input, transcribed text, or recent history
         sheet_id = extract_google_sheets_id(raw_input)
+        
+        transcribed_text = gemini_res.get('transcribed_text', '') if gemini_res else ''
+        if not sheet_id and transcribed_text:
+            sheet_id = extract_google_sheets_id(transcribed_text)
+            
+        lower_transcribed = transcribed_text.lower()
+        lower_raw = (raw_input or "").lower()
+        
+        # Scan history if user mentions tables/import but no link is present in current message
+        if not sheet_id and any(kw in lower_transcribed or kw in lower_raw for kw in ['таблиц', 'ссылк', 'импорт', 'google', 'гугл', 'sheet']):
+            history = USER_CHAT_HISTORY.get(chat_id, [])
+            for h in reversed(history):
+                user_msg = h.get('user', '')
+                sid = extract_google_sheets_id(user_msg)
+                if sid:
+                    sheet_id = sid
+                    break
+                    
         if sheet_id:
-            self.send_message(chat_id, "📥 Обнаружил ссылку на Google Таблицу! Скачиваю и импортирую данные...")
+            self.send_message(chat_id, "📥 Обнаружил ссылку на Google Таблицу в нашей переписке! Скачиваю и импортирую данные...")
             import_reply = import_google_sheet(sheet_id, chat_id)
             self.send_message(chat_id, import_reply)
             return
@@ -829,6 +847,11 @@ class TelegramBot:
                     
                     if audio_bytes:
                         gemini_res = ask_gemini_brain(chat_id=chat_id, audio_bytes=audio_bytes)
+                        # Save voice transcription to history for context awareness!
+                        if gemini_res and gemini_res.get('transcribed_text'):
+                            if not chat_id in USER_CHAT_HISTORY:
+                                USER_CHAT_HISTORY[chat_id] = []
+                            USER_CHAT_HISTORY[chat_id].append({'user': gemini_res['transcribed_text']})
                         self.process_ai_result(chat_id, gemini_res, raw_input="голосовая заметка")
                     else:
                         self.send_message(chat_id, "❌ Не удалось загрузить аудиозапись.")
