@@ -946,12 +946,36 @@ class TelegramBot:
                 
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
+                
+                # Fetch distinct categories to do fuzzy matching in Python
+                cursor.execute("SELECT DISTINCT category FROM transactions")
+                db_cats = [r[0] for r in cursor.fetchall()]
+                
+                matched_cats = []
+                if cat_val:
+                    for db_cat in db_cats:
+                        db_cat_lower = db_cat.lower()
+                        if cat_val in db_cat_lower or db_cat_lower in cat_val:
+                            matched_cats.append(db_cat)
+                        else:
+                            # Match using first 4 characters to handle declensions (e.g. "автомобиль" vs "авто")
+                            prefix_query = cat_val[:4]
+                            prefix_db = db_cat_lower[:4]
+                            if len(prefix_query) >= 3 and len(prefix_db) >= 3 and (prefix_query in db_cat_lower or prefix_db in cat_val):
+                                matched_cats.append(db_cat)
+                                
                 sql = "SELECT SUM(amount) FROM transactions WHERE type='expense'"
                 params = []
                 
                 if cat_val:
-                    sql += " AND LOWER(category) LIKE ?"
-                    params.append(f"%{cat_val}%")
+                    if matched_cats:
+                        placeholders = ",".join("?" for _ in matched_cats)
+                        sql += f" AND category IN ({placeholders})"
+                        params.extend(matched_cats)
+                    else:
+                        sql += " AND LOWER(category) LIKE ?"
+                        params.append(f"%{cat_val}%")
+                        
                 if months_val:
                     sql += " AND date >= date('now', ?)"
                     params.append(f"-{months_val} month")
@@ -961,7 +985,7 @@ class TelegramBot:
                 conn.close()
                 
                 desc_period = f"за последние {months_val} мес." if months_val else "за всё время"
-                desc_category = f"на категорию «{cat_val.capitalize()}»" if cat_val else "на все расходы"
+                desc_category = f"на категорию «{matched_cats[0]}»" if matched_cats else (f"на категорию «{cat_val.capitalize()}»" if cat_val else "на все расходы")
                 
                 web_link = "https://voicefinance.onrender.com"
                 query_params = []

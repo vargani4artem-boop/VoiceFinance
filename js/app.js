@@ -393,16 +393,36 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const qCategory = params.get('category');
         if (qCategory && filterCategoryEl) {
-            filterCategory = qCategory.toLowerCase();
-            // Add custom category option to dropdown if it's not present yet
-            const hasOption = Array.from(filterCategoryEl.options).some(o => o.value === filterCategory);
-            if (!hasOption) {
+            const normQ = qCategory.toLowerCase();
+            
+            // Fuzzy match against existing options
+            let matchedOptionValue = 'all';
+            Array.from(filterCategoryEl.options).forEach(opt => {
+                const optVal = opt.value.toLowerCase();
+                if (optVal === 'all') return;
+                
+                if (optVal.includes(normQ) || normQ.includes(optVal)) {
+                    matchedOptionValue = opt.value;
+                } else {
+                    const prefixDb = optVal.substring(0, 4);
+                    const prefixQ = normQ.substring(0, 4);
+                    if (prefixDb.length >= 3 && prefixQ.length >= 3 && (optVal.includes(prefixQ) || normQ.includes(prefixDb))) {
+                        matchedOptionValue = opt.value;
+                    }
+                }
+            });
+            
+            if (matchedOptionValue !== 'all') {
+                filterCategory = matchedOptionValue;
+                filterCategoryEl.value = matchedOptionValue;
+            } else {
+                filterCategory = normQ;
                 const opt = document.createElement('option');
                 opt.value = filterCategory;
                 opt.textContent = filterCategory;
                 filterCategoryEl.appendChild(opt);
+                filterCategoryEl.value = filterCategory;
             }
-            filterCategoryEl.value = filterCategory;
         }
         
         const qMonthsCount = params.get('months');
@@ -420,7 +440,17 @@ document.addEventListener('DOMContentLoaded', () => {
         let filtered = transactions;
         
         if (filterCategory && filterCategory !== 'all') {
-            filtered = filtered.filter(t => (t.category || '').toLowerCase() === filterCategory.toLowerCase());
+            filtered = filtered.filter(t => {
+                const dbCat = (t.category || '').toLowerCase();
+                const qCat = filterCategory.toLowerCase();
+                if (dbCat === qCat || dbCat.includes(qCat) || qCat.includes(dbCat)) return true;
+                const prefixDb = dbCat.substring(0, 4);
+                const prefixQ = qCat.substring(0, 4);
+                if (prefixDb.length >= 3 && prefixQ.length >= 3 && (dbCat.includes(prefixQ) || qCat.includes(prefixDb))) {
+                    return true;
+                }
+                return false;
+            });
         }
         
         if (filterMonth && filterMonth !== 'all') {
