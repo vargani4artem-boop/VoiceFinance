@@ -947,6 +947,15 @@ class TelegramBot:
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
                 
+                # Safety check: if DB is empty, run sync import
+                cursor.execute("SELECT COUNT(*) FROM transactions")
+                if cursor.fetchone()[0] == 0:
+                    print("[Import] Database empty during QUERY_TX. Sync importing default sheet...")
+                    conn.close()
+                    import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
+                    conn = sqlite3.connect(DB_FILE)
+                    cursor = conn.cursor()
+                
                 # Fetch distinct categories to do fuzzy matching in Python
                 cursor.execute("SELECT DISTINCT category FROM transactions")
                 db_cats = [r[0] for r in cursor.fetchall()]
