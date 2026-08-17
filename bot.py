@@ -339,10 +339,10 @@ CSV образец:
         skipped_count = 0
         processed_sheets_count = 0
         
-        # Clear existing transactions to prevent double import if user re-imports
+        # Clear only previously imported transactions to preserve user's direct voice logs
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM transactions")
+        cursor.execute("DELETE FROM transactions WHERE description LIKE 'Импорт%' OR raw_voice LIKE 'Импорт%'")
         conn.commit()
         conn.close()
         
