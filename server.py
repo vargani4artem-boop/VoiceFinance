@@ -116,6 +116,20 @@ def init_db():
 
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
+    
+    cursor.execute('SELECT COUNT(*) FROM transactions')
+    if cursor.fetchone()[0] == 0:
+        import threading
+        def background_auto_import():
+            try:
+                import bot
+                print("[Auto-Import] Starting background import of default Google Sheet...")
+                bot.import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
+                print("[Auto-Import] Background import completed successfully.")
+            except Exception as e:
+                print(f"[Auto-Import Error] Failed to auto-import default sheet: {e}")
+                
+        threading.Thread(target=background_auto_import, daemon=True).start()
 
     conn.commit()
     conn.close()

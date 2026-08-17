@@ -353,8 +353,11 @@ CSV образец:
             if len(rows) < 5:
                 continue
                 
-            processed_sheets_count += 1
             sheet_year, sheet_month = parse_sheet_date_context(s_name)
+            if sheet_year < 2026 or (sheet_year == 2026 and sheet_month < 8):
+                continue
+            
+            processed_sheets_count += 1
             
             # Auto-detect header row index
             header_row_idx = 0
