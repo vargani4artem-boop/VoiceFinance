@@ -696,3 +696,14 @@ body {
         gap: 0.5rem;
     }
 }
+
+/* Account Cards Hover Effects */
+.account-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border-color: rgba(99, 102, 241, 0.2) !important;
+}
+
+.btn-edit-account:hover {
+    color: var(--text-primary) !important;
+}

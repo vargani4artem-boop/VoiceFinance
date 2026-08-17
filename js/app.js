@@ -178,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('[App] Server unreachable, using local storage.');
             transactions = JSON.parse(localStorage.getItem('vf_txs') || '[]');
         }
+        await loadAccounts();
         populateFilterOptions();
         parseQueryParameters();
         filterAndRender();
@@ -518,6 +519,209 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Global helper for inline onclick
     window.deleteTxHandler = (id) => deleteTransaction(id);
+
+    // Accounts rendering and editing
+    let accounts = [];
+
+    async function loadAccounts() {
+        try {
+            const res = await fetch('/api/accounts');
+            if (res.ok) {
+                const json = await res.json();
+                accounts = json.data || [];
+                renderAccounts();
+            }
+        } catch (e) {
+            console.error('[App] Failed to load accounts:', e);
+        }
+    }
+
+    function renderAccounts() {
+        const accountsGrid = document.getElementById('accountsGrid');
+        if (!accountsGrid) return;
+        
+        accountsGrid.innerHTML = '';
+        
+        // Convert accounts balance to CAD for unified Net Worth estimation
+        // CAD = 1.0, UAH = 0.033, USD = 1.35
+        let totalAssetsCAD = 0.0;
+        let totalDebtsCAD = 0.0;
+        
+        accounts.forEach(acct => {
+            const balance = acct.balance || 0;
+            const currency = acct.currency || 'USD';
+            const type = acct.type || 'asset';
+            
+            let valCAD = balance;
+            if (currency === 'UAH') valCAD = balance * 0.033;
+            else if (currency === 'USD') valCAD = balance * 1.35;
+            
+            if (type === 'asset') {
+                totalAssetsCAD += valCAD;
+            } else {
+                totalDebtsCAD += valCAD;
+            }
+            
+            let iconClass = 'fa-solid fa-wallet';
+            if (acct.name.toLowerCase().includes('сберегательн') || acct.name.toLowerCase().includes('savings')) {
+                iconClass = 'fa-solid fa-piggy-bank';
+            } else if (acct.name.toLowerCase().includes('interactive') || acct.name.toLowerCase().includes('broker')) {
+                iconClass = 'fa-solid fa-arrow-trend-up';
+            } else if (acct.name.toLowerCase().includes('карт')) {
+                iconClass = 'fa-solid fa-credit-card';
+            }
+            
+            let currencySymbol = '$';
+            if (currency === 'UAH') currencySymbol = '₴';
+            else if (currency === 'CAD') currencySymbol = 'C$';
+            
+            const card = document.createElement('div');
+            card.className = `account-card ${type}`;
+            card.style.background = 'rgba(255, 255, 255, 0.03)';
+            card.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+            card.style.borderRadius = '12px';
+            card.style.padding = '1.25rem';
+            card.style.position = 'relative';
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+            card.style.justifyContent = 'space-between';
+            card.style.minHeight = '100px';
+            card.style.transition = 'transform 0.2s, box-shadow 0.2s';
+            
+            if (type === 'asset') {
+                card.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                        <div style="background: rgba(16, 185, 129, 0.1); color: #10B981; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">${acct.name}</div>
+                            <div style="font-size: 1.15rem; font-weight: 700; color: #10B981;">${currencySymbol} ${balance.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                        </div>
+                    </div>
+                    <button class="btn-edit-account" data-id="${acct.id}" style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; color: var(--text-muted); cursor: pointer; transition: color 0.2s; font-size: 0.85rem;"><i class="fa-solid fa-pencil"></i></button>
+                `;
+            } else {
+                const limit = acct.credit_limit || 0;
+                const remaining = acct.credit_remaining || 0;
+                const used = balance;
+                const utilPercent = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+                const isHighUtil = utilPercent > 80;
+                const progressColor = isHighUtil ? '#EF4444' : '#6366F1';
+                
+                card.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                        <div style="background: rgba(239, 68, 68, 0.1); color: #EF4444; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">${acct.name}</div>
+                            <div style="font-size: 1.15rem; font-weight: 700; color: #EF4444;">${currencySymbol} ${used.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted);">долг</span></div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                            <span>Использовано: ${utilPercent.toFixed(0)}%</span>
+                            <span>Осталось: ${currencySymbol}${remaining.toLocaleString('ru-RU', {maximumFractionDigits: 0})}</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${utilPercent}%; height: 100%; background: ${progressColor}; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                    <button class="btn-edit-account" data-id="${acct.id}" style="position: absolute; top: 0.75rem; right: 0.75rem; background: none; border: none; color: var(--text-muted); cursor: pointer; transition: color 0.2s; font-size: 0.85rem;"><i class="fa-solid fa-pencil"></i></button>
+                `;
+            }
+            accountsGrid.appendChild(card);
+        });
+        
+        const netWorthValEl = document.getElementById('netWorthValue');
+        if (netWorthValEl) {
+            const netWorthCAD = totalAssetsCAD - totalDebtsCAD;
+            const sign = netWorthCAD < 0 ? '-' : '';
+            const absValue = Math.abs(netWorthCAD);
+            netWorthValEl.innerText = `${sign}C$ ${absValue.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            netWorthValEl.style.color = netWorthCAD >= 0 ? '#10B981' : '#EF4444';
+        }
+        
+        document.querySelectorAll('.btn-edit-account').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget;
+                const acctId = parseInt(target.getAttribute('data-id'));
+                const acct = accounts.find(a => a.id === acctId);
+                if (acct) {
+                    openAccountModal(acct);
+                }
+            });
+        });
+    }
+
+    function openAccountModal(acct) {
+        const modal = document.getElementById('accountModal');
+        const title = document.getElementById('accountModalTitle');
+        const idInput = document.getElementById('editAccountId');
+        const stdInputWrapper = document.getElementById('standardBalanceInput');
+        const creditInputsWrapper = document.getElementById('creditLimitInputs');
+        
+        idInput.value = acct.id;
+        title.innerText = `Редактировать счет: ${acct.name}`;
+        
+        if (acct.type === 'debt') {
+            stdInputWrapper.style.display = 'none';
+            creditInputsWrapper.style.display = 'flex';
+            document.getElementById('editCreditLimit').value = acct.credit_limit || 0;
+            document.getElementById('editCreditRemaining').value = acct.credit_remaining || 0;
+        } else {
+            stdInputWrapper.style.display = 'block';
+            creditInputsWrapper.style.display = 'none';
+            document.getElementById('editAccountBalance').value = acct.balance || 0;
+        }
+        
+        modal.classList.add('active');
+    }
+
+    const closeAccountModalBtn = document.getElementById('closeAccountModal');
+    const saveAccountBtn = document.getElementById('saveAccountBtn');
+    const accountModal = document.getElementById('accountModal');
+    
+    if (closeAccountModalBtn) {
+        closeAccountModalBtn.addEventListener('click', () => accountModal.classList.remove('active'));
+    }
+    
+    if (saveAccountBtn) {
+        saveAccountBtn.addEventListener('click', async () => {
+            const id = parseInt(document.getElementById('editAccountId').value);
+            const balanceInput = document.getElementById('editAccountBalance').value;
+            const creditLimitInput = document.getElementById('editCreditLimit').value;
+            const creditRemainingInput = document.getElementById('editCreditRemaining').value;
+            
+            const payload = { id };
+            const acct = accounts.find(a => a.id === id);
+            
+            if (acct.type === 'debt') {
+                payload.credit_limit = parseFloat(creditLimitInput) || 0;
+                payload.credit_remaining = parseFloat(creditRemainingInput) || 0;
+            } else {
+                payload.balance = parseFloat(balanceInput) || 0;
+            }
+            
+            try {
+                const res = await fetch('/api/accounts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    showToast('Счет успешно обновлен', 'success');
+                    accountModal.classList.remove('active');
+                    await loadAccounts();
+                } else {
+                    showToast('Ошибка при обновлении счета', 'danger');
+                }
+            } catch (e) {
+                showToast('Ошибка сети', 'danger');
+            }
+        });
+    }
 
     // Toast Function
     function showToast(msg, type = 'info') {

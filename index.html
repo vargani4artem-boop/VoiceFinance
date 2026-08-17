@@ -99,6 +99,19 @@
             </div>
         </div>
 
+        <!-- Accounts & Debts Grid -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <h2 class="card-title"><i class="fa-solid fa-building-columns" style="color: #6366F1;"></i> Мои счета и долги</h2>
+                <div style="font-size: 1rem; font-weight: 600; background: rgba(99, 102, 241, 0.1); padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                    Чистый капитал: <span id="netWorthValue" style="color: #10B981;">$0</span>
+                </div>
+            </div>
+            <div class="accounts-grid" id="accountsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 1.25rem;">
+                <!-- Dynamically populated via JS -->
+            </div>
+        </div>
+
         <!-- Dashboard Analytics & Transactions Grid -->
         <div class="dashboard-grid">
             
@@ -183,17 +196,11 @@
                 <div class="form-group">
                     <label class="form-label">Категория</label>
                     <select class="form-select" id="txCategory">
-                        <option value="продукты">продукты</option>
-                        <option value="бензин">бензин</option>
-                        <option value="транспорт">транспорт</option>
-                        <option value="коммунальные">коммунальные</option>
-                        <option value="кредиты">кредиты</option>
-                        <option value="развлечения">развлечения</option>
-                        <option value="бизнес">бизнес</option>
-                        <option value="кафе и рестораны">кафе и рестораны</option>
-                        <option value="здоровье">здоровье</option>
-                        <option value="зарплата">зарплата</option>
-                        <option value="фриланс">фриланс</option>
+                        <option value="Продукты и жилье (70/30)">Продукты и жилье (70/30)</option>
+                        <option value="Авто (50/50)">Авто (50/50)</option>
+                        <option value="Кафешки (50/50)">Кафешки (50/50)</option>
+                        <option value="Зарплата">Зарплата</option>
+                        <option value="Фриланс">Фриланс</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -202,6 +209,37 @@
                 </div>
                 <button type="submit" class="btn-primary">Сохранить запись</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Account Edit Modal -->
+    <div class="modal-overlay" id="accountModal">
+        <div class="modal-content card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="card-title" id="accountModalTitle">Редактировать счет</h2>
+                <button class="close-btn" id="closeAccountModal">&times;</button>
+            </div>
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
+                <input type="hidden" id="editAccountId">
+                
+                <div id="standardBalanceInput">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Текущий баланс</label>
+                    <input type="number" step="0.01" id="editAccountBalance" class="form-input" placeholder="Введите сумму">
+                </div>
+                
+                <div id="creditLimitInputs" style="display: none; flex-direction: column; gap: 1.25rem;">
+                    <div>
+                        <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Общий кредитный лимит</label>
+                        <input type="number" step="0.01" id="editCreditLimit" class="form-input" placeholder="Кредитный лимит">
+                    </div>
+                    <div>
+                        <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Осталось лимита</label>
+                        <input type="number" step="0.01" id="editCreditRemaining" class="form-input" placeholder="Остаток лимита">
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" id="saveAccountBtn" style="margin-top: 0.5rem; width: 100%;">Сохранить изменения</button>
+            </div>
         </div>
     </div>
 

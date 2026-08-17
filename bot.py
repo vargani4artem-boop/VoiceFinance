@@ -532,7 +532,7 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
   "intent": "ADD_TX" | "CORRECT_LAST" | "DELETE_LAST" | "QUERY_BALANCE" | "EXPORT_PDF" | "QUERY_TX" | "CHAT",
   "type": "expense" | "income",
   "amount": number_or_null,
-  "category": "продукты" | "бензин" | "транспорт" | "коммунальные" | "кредиты" | "развлечения" | "бизнес" | "кафе и рестораны" | "здоровье" | "зарплата" | "фриланс" | "прочее",
+  "category": "Продукты и жилье (70/30)" | "Авто (50/50)" | "Кафешки (50/50)" | "Зарплата" | "Фриланс" | "прочее",
   "new_amount": number_or_null,
   "new_category": string_or_null,
   "query_category": string_or_null,
@@ -946,15 +946,6 @@ class TelegramBot:
                 
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
-                
-                # Safety check: if DB is empty, run sync import
-                cursor.execute("SELECT COUNT(*) FROM transactions")
-                if cursor.fetchone()[0] == 0:
-                    print("[Import] Database empty during QUERY_TX. Sync importing default sheet...")
-                    conn.close()
-                    import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
-                    conn = sqlite3.connect(DB_FILE)
-                    cursor = conn.cursor()
                 
                 # Fetch distinct categories to do fuzzy matching in Python
                 cursor.execute("SELECT DISTINCT category FROM transactions")

@@ -80,19 +80,42 @@ def init_db():
         ]
         cursor.executemany('INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?)', default_cats)
         
-    cursor.execute('SELECT COUNT(*) FROM transactions')
+    # Accounts table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            type TEXT NOT NULL,             -- 'asset' or 'debt'
+            currency TEXT NOT NULL,         -- 'UAH', 'CAD', 'USD'
+            balance REAL NOT NULL,          -- current balance (positive for asset, debt amount for debt)
+            credit_limit REAL DEFAULT 0,    -- total credit limit
+            credit_remaining REAL DEFAULT 0,-- remaining credit limit
+            updated_at TEXT NOT NULL
+        )
+    ''')
+    
+    # Pre-populate accounts if empty
+    cursor.execute('SELECT COUNT(*) FROM accounts')
     if cursor.fetchone()[0] == 0:
-        import threading
-        def background_auto_import():
-            try:
-                import bot
-                print("[Auto-Import] Starting background import of default Google Sheet...")
-                bot.import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
-                print("[Auto-Import] Background import completed successfully.")
-            except Exception as e:
-                print(f"[Auto-Import Error] Failed to auto-import default sheet: {e}")
-                
-        threading.Thread(target=background_auto_import, daemon=True).start()
+        import datetime
+        now_str = datetime.datetime.now().isoformat()
+        initial_accounts = [
+            ('Гривневая карта 1', 'asset', 'UAH', 246558.0, 0.0, 0.0, now_str),
+            ('Гривневая карта 2', 'asset', 'UAH', 115694.0, 0.0, 0.0, now_str),
+            ('Канадская карта 1', 'debt', 'CAD', 3837.0, 7500.0, 3663.0, now_str),
+            ('Канадская карта 2', 'debt', 'CAD', 7891.0, 25000.0, 17109.0, now_str),
+            ('Канадская карта 3', 'debt', 'CAD', 4722.0, 7500.0, 2778.0, now_str),
+            ('Сберегательный счет', 'asset', 'USD', 823.0, 0.0, 0.0, now_str),
+            ('Личный аккаунт', 'asset', 'USD', 609.0, 0.0, 0.0, now_str),
+            ('Interactive Brokers', 'asset', 'USD', 813.0, 0.0, 0.0, now_str)
+        ]
+        cursor.executemany('''
+            INSERT INTO accounts (name, type, currency, balance, credit_limit, credit_remaining, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', initial_accounts)
+
+    # Clean up old transactions (keep only August 2026 and later)
+    cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
 
     conn.commit()
     conn.close()
@@ -114,6 +137,8 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_transactions()
         elif parsed.path == '/api/categories':
             self.get_categories()
+        elif parsed.path == '/api/accounts':
+            self.get_accounts()
         elif parsed.path == '/api/analytics':
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
@@ -155,6 +180,8 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.add_transaction(data)
         elif parsed.path == '/api/categories':
             self.add_category(data)
+        elif parsed.path == '/api/accounts':
+            self.update_account(data)
         elif parsed.path == '/api/telegram-webhook':
             self.handle_telegram_webhook(data)
         else:
@@ -194,6 +221,66 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.end_headers()
         self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode('utf-8'))
+
+    def get_accounts(self):
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM accounts ORDER BY type ASC, id ASC')
+            rows = cursor.fetchall()
+            accounts = [dict(r) for r in rows]
+            conn.close()
+            self.send_json({'success': True, 'data': accounts})
+        except Exception as e:
+            self.send_json({'success': False, 'error': str(e)}, status=500)
+
+    def update_account(self, data):
+        account_id = data.get('id')
+        balance = data.get('balance')
+        credit_limit = data.get('credit_limit')
+        credit_remaining = data.get('credit_remaining')
+        
+        if not account_id:
+            self.send_json({'success': False, 'error': 'Account ID is required'}, status=400)
+            return
+            
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT type FROM accounts WHERE id = ?', (account_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                self.send_json({'success': False, 'error': 'Account not found'}, status=404)
+                return
+                
+            acct_type = row[0]
+            now_str = datetime.now().isoformat()
+            
+            if acct_type == 'debt' and credit_limit is not None and credit_remaining is not None:
+                credit_limit = float(credit_limit)
+                credit_remaining = float(credit_remaining)
+                balance = max(0.0, credit_limit - credit_remaining)
+                cursor.execute('''
+                    UPDATE accounts 
+                    SET balance = ?, credit_limit = ?, credit_remaining = ?, updated_at = ?
+                    WHERE id = ?
+                ''', (balance, credit_limit, credit_remaining, now_str, account_id))
+            else:
+                balance = float(balance)
+                cursor.execute('''
+                    UPDATE accounts 
+                    SET balance = ?, updated_at = ?
+                    WHERE id = ?
+                ''', (balance, now_str, account_id))
+                
+            conn.commit()
+            conn.close()
+            self.send_json({'success': True})
+        except Exception as e:
+            self.send_json({'success': False, 'error': str(e)}, status=500)
 
     def get_transactions(self):
         conn = sqlite3.connect(DB_FILE)
