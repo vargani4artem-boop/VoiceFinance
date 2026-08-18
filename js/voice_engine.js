@@ -97,7 +97,13 @@ class VoiceEngine {
         this.recognition.onerror = (event) => {
             console.error('[Voice Engine] Error:', event.error);
             if (event.error !== 'no-speech') {
-                this.updateStatus(`Ошибка: ${event.error}`, false);
+                let errMsg = `Ошибка: ${event.error}`;
+                if (event.error === 'not-allowed') {
+                    errMsg = '⚠️ Ошибка: нет доступа к микрофону. Откройте ссылку в Safari/Chrome!';
+                } else if (event.error === 'network') {
+                    errMsg = '⚠️ Ошибка сети при распознавании.';
+                }
+                this.updateStatus(errMsg, false);
             }
         };
 

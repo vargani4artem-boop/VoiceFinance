@@ -53,8 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceEngine = new VoiceEngine({
         canvas: voiceCanvas,
         onStatusChange: (text, listening) => {
-            if (voiceStatus && voiceStatus.innerText.startsWith('✅') && (text === 'Нажмите микрофон для записи' || text === 'Нажмите для активации')) {
-                // Keep the success receipt text visible until next recording starts
+            if (voiceStatus && (voiceStatus.innerText.startsWith('✅') || voiceStatus.innerText.startsWith('⚠️') || voiceStatus.innerText.startsWith('Ошибка')) && (text === 'Нажмите микрофон для записи' || text === 'Нажмите для активации')) {
+                // Keep the success receipt or error text visible until next recording starts
                 if (!listening) {
                     voiceBtn.classList.remove('listening');
                     voiceBtnIcon.className = 'fa-solid fa-microphone';
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     voiceBtn.addEventListener('click', () => {
-        if (!voiceEngine.isListening && voiceStatus && voiceStatus.innerText.startsWith('✅')) {
+        if (!voiceEngine.isListening && voiceStatus && (voiceStatus.innerText.startsWith('✅') || voiceStatus.innerText.startsWith('⚠️') || voiceStatus.innerText.startsWith('Ошибка'))) {
             voiceStatus.innerText = 'Слушаю...';
         }
         voiceEngine.toggleListening();

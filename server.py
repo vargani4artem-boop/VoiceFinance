@@ -30,6 +30,11 @@ DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 PORT = int(os.environ.get("PORT", 8000))
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
 
+def normalize_category(cat):
+    if not cat:
+        return "прочее"
+    return cat.strip().lower()
+
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -306,12 +311,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.send_json({'success': True, 'data': status_copy})
         except Exception as e:
             self.send_json({'success': False, 'error': f"Failed to get bot status: {e}"})
-
-def normalize_category(cat):
-    if not cat:
-        return "прочее"
-    return cat.strip().lower()
-
     def add_transaction(self, data):
         tx_type = data.get('type', 'expense')
         amount = float(data.get('amount', 0))
