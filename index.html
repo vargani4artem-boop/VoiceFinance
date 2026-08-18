@@ -41,6 +41,12 @@
             <div class="voice-status-text" id="voiceStatus" style="font-size: 1.4rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.75rem;">Нажмите, чтобы записать расход или доход</div>
             <div class="voice-subtext" id="voiceSubtext" style="font-size: 0.95rem; color: var(--text-muted); max-width: 400px; line-height: 1.5; margin-bottom: 1.5rem;">Например: "Запиши 50 долларов на продукты" или "Запиши 100 долларов на химию"</div>
             <canvas class="voice-waveform-canvas" id="voiceWaveform" width="300" height="40" style="margin-top: 1rem;"></canvas>
+            
+            <!-- Real-time dynamic feedback block -->
+            <div id="lastTxContainer" style="margin-top: 2.5rem; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); padding: 1.2rem 2rem; border-radius: 16px; min-width: 280px; max-width: 450px; text-align: center; backdrop-filter: blur(10px); transition: all 0.3s ease; opacity: 0; transform: translateY(10px);">
+                <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.4rem;">Последняя запись:</div>
+                <div id="lastTxText" style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">Нет записей</div>
+            </div>
         </div>
     </div>
 

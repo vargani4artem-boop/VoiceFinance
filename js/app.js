@@ -230,6 +230,25 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Запись удалена', 'info');
     }
 
+    function updateLastTxWidget() {
+        const container = document.getElementById('lastTxContainer');
+        const textEl = document.getElementById('lastTxText');
+        if (!container || !textEl) return;
+
+        if (transactions.length > 0) {
+            const last = transactions[0];
+            const typeLabel = last.type === 'income' ? 'Доход 🟢' : 'Расход 🔴';
+            const amtStr = parseFloat(last.amount).toFixed(2);
+            textEl.innerHTML = `<span style="color: ${last.type === 'income' ? '#10B981' : '#EF4444'}; font-weight: 800;">${typeLabel} $${amtStr}</span> — ${last.category || last.description || 'прочее'}`;
+            container.style.opacity = '1';
+            container.style.transform = 'translateY(0)';
+        } else {
+            textEl.innerText = 'Нет записей';
+            container.style.opacity = '0.5';
+            container.style.transform = 'translateY(0)';
+        }
+    }
+
     function updateUI(dataList = transactions) {
         // Calculate Totals
         let income = 0;
@@ -296,6 +315,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render Trend Chart
         const monthlyData = calculateMonthlyTrends(dataList);
         charts.renderTrendChart('trendChart', monthlyData);
+
+        // Update Last Transaction Widget on main screen
+        updateLastTxWidget();
     }
 
     function calculateCategoryTotals(dataList = transactions) {
@@ -843,6 +865,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => toast.remove(), 4000);
     }
 
-    // Initial Data Load
+    // Initial Data Load & Background real-time polling (every 3 seconds)
     loadData();
+    setInterval(loadData, 3000);
 });
