@@ -53,6 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceEngine = new VoiceEngine({
         canvas: voiceCanvas,
         onStatusChange: (text, listening) => {
+            if (voiceStatus && voiceStatus.innerText.startsWith('✅') && (text === 'Нажмите микрофон для записи' || text === 'Нажмите для активации')) {
+                // Keep the success receipt text visible until next recording starts
+                if (!listening) {
+                    voiceBtn.classList.remove('listening');
+                    voiceBtnIcon.className = 'fa-solid fa-microphone';
+                }
+                return;
+            }
             voiceStatus.innerText = text;
             if (listening) {
                 voiceBtn.classList.add('listening');
@@ -68,6 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     voiceBtn.addEventListener('click', () => {
+        if (!voiceEngine.isListening && voiceStatus && voiceStatus.innerText.startsWith('✅')) {
+            voiceStatus.innerText = 'Слушаю...';
+        }
         voiceEngine.toggleListening();
     });
 
@@ -100,13 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     raw_voice: parsed.raw
                 });
 
-                const typeText = parsed.type === 'income' ? 'Доход 🟢' : 'Расход 🔴';
-                const msg = `${typeText} $${parsed.amount} на "${parsed.category}" сохранён!`;
-                showToast(msg, 'success');
+                const amtStr = `$${parsed.amount.toFixed(2)}`;
+                const displayMsg = `${amtStr} на ${parsed.description || parsed.category} внесены в раздел '${parsed.category}'`;
+                showToast(`✅ ${displayMsg}`, 'success');
                 if (voiceStatus) {
-                    voiceStatus.innerText = `✅ Успешно: ${typeText} $${parsed.amount.toFixed(2)} — ${parsed.category}`;
+                    voiceStatus.innerText = `✅ ${displayMsg}`;
                 }
-                voiceEngine.speak(`${typeText} ${parsed.amount} долларов на ${parsed.category} сохранён!`);
+                voiceEngine.speak(displayMsg);
                 break;
 
             case 'QUERY_RATIO':
