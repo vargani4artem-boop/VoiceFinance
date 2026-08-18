@@ -100,8 +100,8 @@ def init_db():
         import datetime
         now_str = datetime.datetime.now().isoformat()
         initial_accounts = [
-            ('Гривневая карта 1', 'asset', 'UAH', 246558.0, 0.0, 0.0, now_str),
-            ('Гривневая карта 2', 'asset', 'UAH', 115694.0, 0.0, 0.0, now_str),
+            ('Гривневая карта 1', 'debt', 'UAH', 246558.0, 0.0, 0.0, now_str),
+            ('Гривневая карта 2', 'debt', 'UAH', 115694.0, 0.0, 0.0, now_str),
             ('Канадская карта 1', 'debt', 'CAD', 3837.0, 7500.0, 3663.0, now_str),
             ('Канадская карта 2', 'debt', 'CAD', 7891.0, 25000.0, 17109.0, now_str),
             ('Канадская карта 3', 'debt', 'CAD', 4722.0, 7500.0, 2778.0, now_str),
@@ -113,6 +113,9 @@ def init_db():
             INSERT INTO accounts (name, type, currency, balance, credit_limit, credit_remaining, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', initial_accounts)
+
+    # Migrate UAH accounts to debt if they exist as assets
+    cursor.execute("UPDATE accounts SET type = 'debt' WHERE name IN ('Гривневая карта 1', 'Гривневая карта 2')")
 
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
