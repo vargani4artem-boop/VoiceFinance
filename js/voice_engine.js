@@ -114,7 +114,9 @@ class VoiceEngine {
         if (!this.recognition) {
             const ok = this.initRecognition();
             if (!ok) {
-                alert('Ваш браузер не поддерживает голосовой ввод Web Speech API. Используйте Google Chrome, Microsoft Edge или Safari.');
+                const errMsg = '⚠️ Голосовой ввод не поддерживается в Telegram. Откройте ссылку в Safari/Chrome!';
+                this.updateStatus(errMsg, false);
+                alert(errMsg);
                 return;
             }
         }
