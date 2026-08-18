@@ -100,10 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     raw_voice: parsed.raw
                 });
 
-                const typeText = parsed.type === 'income' ? 'Доход' : 'Расход';
-                const msg = `${typeText} ${parsed.amount} долларов на ${parsed.category} сохранён!`;
+                const typeText = parsed.type === 'income' ? 'Доход 🟢' : 'Расход 🔴';
+                const msg = `${typeText} $${parsed.amount} на "${parsed.category}" сохранён!`;
                 showToast(msg, 'success');
-                voiceEngine.speak(msg);
+                if (voiceStatus) {
+                    voiceStatus.innerText = `✅ Успешно: ${typeText} $${parsed.amount.toFixed(2)} — ${parsed.category}`;
+                }
+                voiceEngine.speak(`${typeText} ${parsed.amount} долларов на ${parsed.category} сохранён!`);
                 break;
 
             case 'QUERY_RATIO':

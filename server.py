@@ -328,11 +328,33 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({'success': False, 'error': f"Failed to get bot status: {e}"})
 
+def normalize_category(cat):
+    if not cat:
+        return "прочее"
+    c_clean = cat.strip().lower()
+    if "продукт" in c_clean or "жил" in c_clean or "70/30" in c_clean or "хими" in c_clean:
+        return "Продукты и жилье (70/30)"
+    if "авто" in c_clean or "машин" in c_clean or "50/50" in c_clean or "бенз" in c_clean or "заправ" in c_clean:
+        if "кафе" in c_clean or "кофе" in c_clean:
+            return "Кафешки (50/50)"
+        return "Авто (50/50)"
+    if "кафе" in c_clean or "кофе" in c_clean or "ресто" in c_clean or "бар" in c_clean:
+        return "Кафешки (50/50)"
+    if "зарпат" in c_clean or "оклад" in c_clean:
+        return "Зарплата"
+    if "фриланс" in c_clean or "freelance" in c_clean:
+        return "Фриланс"
+    
+    for std in ["Продукты и жилье (70/30)", "Automotive", "Авто (50/50)", "Кафешки (50/50)", "Зарплата", "Фриланс"]:
+        if std.lower() == c_clean:
+            return std
+    return cat
+
     def add_transaction(self, data):
         tx_type = data.get('type', 'expense')
         amount = float(data.get('amount', 0))
         currency = data.get('currency', 'USD')
-        category = data.get('category', 'прочее').lower()
+        category = normalize_category(data.get('category', 'прочее'))
         description = data.get('description', '')
         raw_voice = data.get('raw_voice', '')
         date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
