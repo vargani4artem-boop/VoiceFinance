@@ -120,6 +120,13 @@ def init_db():
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
     
+    # Normalize categories case-sensitivity in existing transactions
+    cursor.execute("UPDATE transactions SET category = 'Продукты и жилье (70/30)' WHERE LOWER(category) IN ('продукты и жилье (70/30)', 'продукты', 'жилье')")
+    cursor.execute("UPDATE transactions SET category = 'Авто (50/50)' WHERE LOWER(category) IN ('авто (50/50)', 'авто', 'машина')")
+    cursor.execute("UPDATE transactions SET category = 'Кафешки (50/50)' WHERE LOWER(category) IN ('кафешки (50/50)', 'кафешки', 'кафе')")
+    cursor.execute("UPDATE transactions SET category = 'Зарплата' WHERE LOWER(category) IN ('зарплата')")
+    cursor.execute("UPDATE transactions SET category = 'Фриланс' WHERE LOWER(category) IN ('фриланс')")
+    
     cursor.execute('SELECT COUNT(*) FROM transactions')
     if cursor.fetchone()[0] == 0:
         import threading

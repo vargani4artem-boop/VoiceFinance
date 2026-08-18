@@ -753,7 +753,30 @@ def generate_pdf_report(filename="voicefinance_report.pdf"):
     return filename
 
 # Database helper functions
+def normalize_category(cat):
+    if not cat:
+        return "прочее"
+    c_clean = cat.strip().lower()
+    if "продукт" in c_clean or "жил" in c_clean or "70/30" in c_clean or "хими" in c_clean:
+        return "Продукты и жилье (70/30)"
+    if "авто" in c_clean or "машин" in c_clean or "50/50" in c_clean or "бенз" in c_clean or "заправ" in c_clean:
+        if "кафе" in c_clean or "кофе" in c_clean:
+            return "Кафешки (50/50)"
+        return "Авто (50/50)"
+    if "кафе" in c_clean or "кофе" in c_clean or "ресто" in c_clean or "бар" in c_clean:
+        return "Кафешки (50/50)"
+    if "зарплат" in c_clean or "оклад" in c_clean:
+        return "Зарплата"
+    if "фриланс" in c_clean or "freelance" in c_clean:
+        return "Фриланс"
+    
+    for std in ["Продукты и жилье (70/30)", "Авто (50/50)", "Кафешки (50/50)", "Зарплата", "Фриланс"]:
+        if std.lower() == c_clean:
+            return std
+    return cat
+
 def save_transaction(tx_type, amount, category, raw, custom_date=None):
+    category = normalize_category(category)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     date_str = custom_date if custom_date else datetime.now().strftime('%Y-%m-%d')
@@ -919,7 +942,16 @@ class TelegramBot:
                 save_transaction(tx_type, amt, cat, transcribed or raw_input)
                 income, expense, balance = get_analytics()
                 
-                full_reply = f"{prefix}✨ {ai_reply}\n\n💳 <b>Текущий баланс: ${balance:,.2f}</b>"
+                type_label = "Расход 🔴" if tx_type == 'expense' else "Доход 🟢"
+                receipt = (
+                    f"✅ <b>Запись добавлена!</b>\n"
+                    f"🔹 Тип: <b>{type_label}</b>\n"
+                    f"💵 Сумма: <b>${amt:,.2f}</b>\n"
+                    f"🏷️ Категория: <b>{cat}</b>\n"
+                    f"📝 Детали: <i>{transcribed or raw_input}</i>\n\n"
+                )
+                
+                full_reply = f"{prefix}{receipt}✨ {ai_reply}\n\n💳 <b>Текущий баланс: ${balance:,.2f}</b>"
                 self.send_message(chat_id, full_reply)
                 return
 
