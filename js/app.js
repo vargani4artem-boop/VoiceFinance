@@ -723,6 +723,96 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Quick Voice Action Buttons Event Listeners
+    const btnQuickExpenses = document.getElementById('btnQuickExpenses');
+    const btnQuickCategories = document.getElementById('btnQuickCategories');
+    const btnQuickIncomes = document.getElementById('btnQuickIncomes');
+    const btnQuickDifference = document.getElementById('btnQuickDifference');
+
+    function getFilteredMetrics() {
+        let inc = 0;
+        let exp = 0;
+        const catMap = {};
+        
+        let filtered = [...transactions];
+        if (filterMonth !== 'all') {
+            filtered = filtered.filter(t => t.date && t.date.startsWith(filterMonth));
+        }
+        if (filterCategory !== 'all') {
+            filtered = filtered.filter(t => t.category === filterCategory);
+        }
+        if (filterSearch) {
+            const query = filterSearch.toLowerCase();
+            filtered = filtered.filter(t => 
+                (t.description || '').toLowerCase().includes(query) || 
+                (t.category || '').toLowerCase().includes(query)
+            );
+        }
+
+        filtered.forEach(t => {
+            const amt = parseFloat(t.amount || 0);
+            if (t.type === 'income') {
+                inc += amt;
+            } else {
+                exp += amt;
+                catMap[t.category] = (catMap[t.category] || 0) + amt;
+            }
+        });
+
+        return { income: inc, expense: exp, categories: catMap };
+    }
+
+    if (btnQuickExpenses) {
+        btnQuickExpenses.addEventListener('click', () => {
+            const m = getFilteredMetrics();
+            const speechText = `Сумма расходов за этот период составляет ${m.expense.toFixed(0)} долларов.`;
+            showToast(speechText, 'info');
+            voiceEngine.speak(speechText);
+        });
+    }
+
+    if (btnQuickCategories) {
+        btnQuickCategories.addEventListener('click', () => {
+            const m = getFilteredMetrics();
+            const sortedCats = Object.entries(m.categories).sort((a, b) => b[1] - a[1]);
+            if (sortedCats.length === 0) {
+                const noDataText = "Расходы по категориям отсутствуют.";
+                showToast(noDataText, 'info');
+                voiceEngine.speak(noDataText);
+                return;
+            }
+            const breakdown = sortedCats.map(c => `${c[0]}: ${c[1].toFixed(0)} долларов`).join(', ');
+            const speechText = `Расходы по категориям: ${breakdown}.`;
+            showToast(speechText, 'info');
+            const shortBreakdown = sortedCats.slice(0, 3).map(c => `${c[0]} — ${c[1].toFixed(0)} долларов`).join(', ');
+            voiceEngine.speak(`Основные статьи расходов: ${shortBreakdown}`);
+        });
+    }
+
+    if (btnQuickIncomes) {
+        btnQuickIncomes.addEventListener('click', () => {
+            const m = getFilteredMetrics();
+            const speechText = `Сумма ваших доходов за этот период составляет ${m.income.toFixed(0)} долларов.`;
+            showToast(speechText, 'info');
+            voiceEngine.speak(speechText);
+        });
+    }
+
+    if (btnQuickDifference) {
+        btnQuickDifference.addEventListener('click', () => {
+            const m = getFilteredMetrics();
+            const diff = m.income - m.expense;
+            let speechText = '';
+            if (diff >= 0) {
+                speechText = `Разница положительная: профицит бюджета составляет ${diff.toFixed(0)} долларов.`;
+            } else {
+                speechText = `Разница отрицательная: дефицит бюджета составляет ${Math.abs(diff).toFixed(0)} долларов.`;
+            }
+            showToast(speechText, 'info');
+            voiceEngine.speak(speechText);
+        });
+    }
+
     // Toast Function
     function showToast(msg, type = 'info') {
         const container = document.getElementById('toastContainer');

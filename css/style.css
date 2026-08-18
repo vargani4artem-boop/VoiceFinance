@@ -707,3 +707,23 @@ body {
 .btn-edit-account:hover {
     color: var(--text-primary) !important;
 }
+
+/* Quick Actions styling */
+.quick-action-btn {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-muted) !important;
+    border-radius: 10px;
+    transition: all 0.2s ease-in-out;
+}
+
+.quick-action-btn:hover {
+    background: rgba(99, 102, 241, 0.15) !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
+    color: #a5b4fc !important;
+    transform: scale(1.03);
+}
+
+.quick-action-btn:active {
+    transform: scale(0.97);
+}
