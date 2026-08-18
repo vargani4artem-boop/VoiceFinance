@@ -727,3 +727,36 @@ body {
 .quick-action-btn:active {
     transform: scale(0.97);
 }
+
+/* Screen Toggle System */
+.screen {
+    display: none;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 100%;
+}
+
+.screen.active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Dictation Mode Recording button states */
+.voice-trigger-btn.listening {
+    animation: voicePulse 1.8s infinite alternate ease-in-out;
+    background: linear-gradient(135deg, #EF4444, #EC4899) !important;
+    box-shadow: 0 0 40px rgba(239, 68, 68, 0.5) !important;
+}
+
+@keyframes voicePulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    }
+    100% {
+        transform: scale(1.08);
+        box-shadow: 0 0 45px rgba(239, 68, 68, 0.7);
+    }
+}

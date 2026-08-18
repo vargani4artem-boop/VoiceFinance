@@ -493,6 +493,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Screen Toggle Event Listeners
+    const btnOpenReports = document.getElementById('btnOpenReports');
+    const btnCloseReports = document.getElementById('btnCloseReports');
+    const recorderScreen = document.getElementById('recorderScreen');
+    const reportsScreen = document.getElementById('reportsScreen');
+
+    if (btnOpenReports && btnCloseReports && recorderScreen && reportsScreen) {
+        btnOpenReports.addEventListener('click', () => {
+            recorderScreen.classList.remove('active');
+            reportsScreen.classList.add('active');
+        });
+        btnCloseReports.addEventListener('click', () => {
+            reportsScreen.classList.remove('active');
+            recorderScreen.classList.add('active');
+        });
+    }
+
     // Modal & Form Handlers
     btnManualAdd.addEventListener('click', () => addModal.classList.add('active'));
     btnCloseModal.addEventListener('click', () => addModal.classList.remove('active'));
@@ -500,7 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     addTxForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const type = document.getElementById('txType').value;
+        const type = document.querySelector('input[name="txType"]:checked').value;
         const amount = parseFloat(document.getElementById('txAmount').value);
         const category = document.getElementById('txCategory').value;
         const description = document.getElementById('txDesc').value;

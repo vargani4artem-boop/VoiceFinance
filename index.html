@@ -13,188 +13,192 @@
 </head>
 <body>
 
-    <!-- Header -->
-    <header class="app-header">
-        <div class="brand">
-            <div class="brand-icon">
-                <i class="fa-solid fa-microphone-lines"></i>
+    <!-- SCREEN 1: Minimalist Dictation Interface (Recorder) -->
+    <div id="recorderScreen" class="screen active">
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-microphone-lines"></i>
+                </div>
+                <div>
+                    <span class="brand-title">VoiceFinance</span>
+                    <span class="brand-badge">Siri AI Edition</span>
+                </div>
             </div>
-            <div>
-                <span class="brand-title">VoiceFinance</span>
-                <span class="brand-badge">Siri AI Edition</span>
+            <div class="header-actions">
+                <button class="btn-primary" id="btnOpenReports" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 1.2rem; font-weight: 600; cursor: pointer; border-radius: 12px; background: var(--primary); border: none; color: white; transition: transform 0.2s;">
+                    <i class="fa-solid fa-chart-line"></i> Отчёты
+                </button>
             </div>
-        </div>
-        <div class="header-actions">
-            <button class="btn-secondary" id="btnExportCSV">
-                <i class="fa-solid fa-file-csv"></i> CSV
-            </button>
-            <button class="btn-secondary" id="btnExportPDF">
-                <i class="fa-solid fa-file-pdf"></i> PDF Отчёт
-            </button>
-            <button class="btn-secondary" id="btnManualAdd">
-                <i class="fa-solid fa-plus"></i> Добавить вручную
-            </button>
-        </div>
-    </header>
+        </header>
 
-    <div class="container">
-        
-        <!-- Hero Siri Voice Assistant Card -->
-        <div class="voice-hero-card">
-            <div class="voice-trigger-wrapper">
-                <button class="voice-trigger-btn" id="voiceBtn" title="Нажмите для начала распознавания">
+        <div class="recorder-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 75vh; padding: 2rem; text-align: center;">
+            <div class="voice-trigger-wrapper" style="margin-bottom: 2rem;">
+                <button class="voice-trigger-btn" id="voiceBtn" title="Нажмите для начала распознавания" style="width: 180px; height: 180px; font-size: 3.5rem; border-radius: 50%; background: linear-gradient(135deg, #6366F1, #8B5CF6); border: none; color: white; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; position: relative;">
                     <i class="fa-solid fa-microphone" id="voiceBtnIcon"></i>
                 </button>
             </div>
-            <div class="voice-status-text" id="voiceStatus">Нажмите микрофон или скажите «Эй Финансы»</div>
-            <div class="voice-subtext" id="voiceSubtext">Назовите сумму и категорию (например: «расход 50 долларов на бензин»)</div>
-            <canvas class="voice-waveform-canvas" id="voiceWaveform" width="300" height="40"></canvas>
-            
-            <div class="voice-hint-tags">
-                <span class="hint-tag" data-cmd="расход 50 долларов на бензин">⛽ расход 50$ на бензин</span>
-                <span class="hint-tag" data-cmd="доход 3000 зарплата">💰 доход 3000$ зарплата</span>
-                <span class="hint-tag" data-cmd="покажи расходы на продукты">🛒 покажи расходы на продукты</span>
-                <span class="hint-tag" data-cmd="сравни бензин за три месяца">📊 сравни бензин за 3 месяца</span>
-                <span class="hint-tag" data-cmd="во сколько раз доходы больше расходов">⚖️ во сколько раз доходы больше</span>
-                <span class="hint-tag" data-cmd="какой мой топ расход">🔥 топ расход по категориям</span>
+            <div class="voice-status-text" id="voiceStatus" style="font-size: 1.4rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.75rem;">Нажмите, чтобы записать расход или доход</div>
+            <div class="voice-subtext" id="voiceSubtext" style="font-size: 0.95rem; color: var(--text-muted); max-width: 400px; line-height: 1.5; margin-bottom: 1.5rem;">Например: "Запиши 50 долларов на продукты" или "Запиши 100 долларов на химию"</div>
+            <canvas class="voice-waveform-canvas" id="voiceWaveform" width="300" height="40" style="margin-top: 1rem;"></canvas>
         </div>
-
-        <!-- Quick Voice Actions -->
-        <div class="quick-actions-bar" style="display: flex; gap: 0.75rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary quick-action-btn" id="btnQuickExpenses" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-calculator"></i> Расходы за период</button>
-            <button class="btn btn-secondary quick-action-btn" id="btnQuickCategories" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-chart-pie"></i> Категории</button>
-            <button class="btn btn-secondary quick-action-btn" id="btnQuickIncomes" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-wallet"></i> Доходы за период</button>
-            <button class="btn btn-secondary quick-action-btn" id="btnQuickDifference" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-scale-balanced"></i> Доходы vs Расходы</button>
-        </div>
-
-        <!-- Metric Summary Grid -->
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Общие доходы</span>
-                    <div class="metric-icon-bg icon-income"><i class="fa-solid fa-arrow-down-left"></i></div>
-                </div>
-                <div class="metric-value val-income" id="metricIncome">$0</div>
-                <div class="metric-sub">Автоматический учёт поступлений</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Общие расходы</span>
-                    <div class="metric-icon-bg icon-expense"><i class="fa-solid fa-arrow-up-right"></i></div>
-                </div>
-                <div class="metric-value val-expense" id="metricExpense">$0</div>
-                <div class="metric-sub">Распределение по категориям</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Текущий баланс</span>
-                    <div class="metric-icon-bg icon-balance"><i class="fa-solid fa-wallet"></i></div>
-                </div>
-                <div class="metric-value val-balance" id="metricBalance">$0</div>
-                <div class="metric-sub">Чистый остаток средств</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Доходы / Расходы</span>
-                    <div class="metric-icon-bg icon-ratio"><i class="fa-solid fa-scale-balanced"></i></div>
-                </div>
-                <div class="metric-value val-ratio" id="metricRatio">0.0x</div>
-                <div class="metric-sub" id="metricRatioText">Коэффициент финансовой стабильности</div>
-            </div>
-        </div>
-
-        <!-- Accounts & Debts Grid -->
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                <h2 class="card-title"><i class="fa-solid fa-building-columns" style="color: #6366F1;"></i> Мои счета и долги</h2>
-                <div style="font-size: 1rem; font-weight: 600; background: rgba(99, 102, 241, 0.1); padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.2);">
-                    Чистый капитал: <span id="netWorthValue" style="color: #10B981;">$0</span>
-                </div>
-            </div>
-            <div class="accounts-grid" id="accountsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 1.25rem;">
-                <!-- Dynamically populated via JS -->
-            </div>
-        </div>
-
-        <!-- Dashboard Analytics & Transactions Grid -->
-        <div class="dashboard-grid">
-            
-            <!-- Left Column: Analytics Charts -->
-            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title"><i class="fa-solid fa-chart-pie" style="color: #6366F1;"></i> Аналитика расходов и тренды</h2>
-                    </div>
-                    <div class="charts-grid">
-                        <div class="chart-wrapper">
-                            <canvas id="categoryChart"></canvas>
-                        </div>
-                        <div class="chart-wrapper">
-                            <canvas id="trendChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card" id="compareCard" style="display: none;">
-                    <div class="card-header">
-                        <h2 class="card-title"><i class="fa-solid fa-chart-line" style="color: #8B5CF6;"></i> Голосовое сравнение категорий</h2>
-                        <button class="close-btn" id="btnCloseCompare">&times;</button>
-                    </div>
-                    <div class="chart-wrapper">
-                        <canvas id="compareChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column: Recent Voice Transactions -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title"><i class="fa-solid fa-list-check" style="color: #10B981;"></i> Операции</h2>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);" id="txCount">0 записей</span>
-                </div>
-                
-                <div class="filter-bar">
-                    <select class="form-select-sm" id="filterMonth">
-                        <option value="all">Все месяцы</option>
-                    </select>
-                    <select class="form-select-sm" id="filterCategory">
-                        <option value="all">Все категории</option>
-                    </select>
-                    <div class="search-input-wrapper">
-                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                        <input type="text" class="form-input-sm" id="filterSearch" placeholder="Поиск по описанию...">
-                    </div>
-                </div>
-                
-                <div class="tx-list" id="txList">
-                    <div class="empty-state">
-                        <div class="empty-icon"><i class="fa-solid fa-microphone-slash"></i></div>
-                        <p>Операций пока нет. Скажите команду микрофону!</p>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
     </div>
 
-    <!-- Modal for Manual Adding -->
+    <!-- SCREEN 2: Dashboard Reports (Slide-in / Slide-out) -->
+    <div id="reportsScreen" class="screen">
+        <header class="app-header">
+            <div class="brand" style="display: flex; align-items: center;">
+                <button class="btn-secondary" id="btnCloseReports" style="margin-right: 1rem; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text-primary);">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div>
+                    <span class="brand-title">Отчёты и Счета</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-secondary" id="btnExportCSV">
+                    <i class="fa-solid fa-file-csv"></i> CSV
+                </button>
+                <button class="btn-secondary" id="btnExportPDF">
+                    <i class="fa-solid fa-file-pdf"></i> PDF
+                </button>
+                <button class="btn-secondary" id="btnManualAdd">
+                    <i class="fa-solid fa-plus"></i> Вручную
+                </button>
+            </div>
+        </header>
+
+        <div class="container" style="padding-top: 1.5rem;">
+            <!-- Metric Summary Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Общие доходы</span>
+                        <div class="metric-icon-bg icon-income"><i class="fa-solid fa-arrow-down-left"></i></div>
+                    </div>
+                    <div class="metric-value val-income" id="metricIncome">$0</div>
+                    <div class="metric-sub">Автоматический учёт поступлений</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Общие расходы</span>
+                        <div class="metric-icon-bg icon-expense"><i class="fa-solid fa-arrow-up-right"></i></div>
+                    </div>
+                    <div class="metric-value val-expense" id="metricExpense">$0</div>
+                    <div class="metric-sub">Распределение по категориям</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Баланс / Net Worth</span>
+                        <div class="metric-icon-bg icon-savings"><i class="fa-solid fa-scale-balanced"></i></div>
+                    </div>
+                    <div class="metric-value val-savings" id="netWorthValue">C$ 0.00</div>
+                    <div class="metric-sub">Чистый капитал (в CAD)</div>
+                </div>
+            </div>
+
+            <!-- Accounts & Debts Grid -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div class="card-header">
+                    <h2 class="card-title"><i class="fa-solid fa-building-columns"></i> Мои счета и долги</h2>
+                </div>
+                <div class="card-body">
+                    <div id="accountsGrid" class="accounts-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem;">
+                        <!-- Dynamically filled with assets and credit card debts -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Voice Actions -->
+            <div class="quick-actions-bar" style="display: flex; gap: 0.75rem; justify-content: center; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary quick-action-btn" id="btnQuickExpenses" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-calculator"></i> Расходы за период</button>
+                <button class="btn btn-secondary quick-action-btn" id="btnQuickCategories" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-chart-pie"></i> Категории</button>
+                <button class="btn btn-secondary quick-action-btn" id="btnQuickIncomes" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-wallet"></i> Доходы за период</button>
+                <button class="btn btn-secondary quick-action-btn" id="btnQuickDifference" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-scale-balanced"></i> Доходы vs Расходы</button>
+            </div>
+
+            <!-- Charts and analytics -->
+            <div class="charts-row">
+                <div class="chart-card card">
+                    <div class="card-header">
+                        <h2 class="card-title">Расходы по категориям</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card card">
+                    <div class="card-header">
+                        <h2 class="card-title">Динамика расходов и доходов</h2>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter and Manual Form -->
+            <div class="filter-bar">
+                <div class="search-input-wrapper">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" class="form-input-sm" id="filterSearch" placeholder="Поиск по описанию...">
+                </div>
+                <select class="form-select-sm" id="filterMonth">
+                    <option value="all">Все месяцы</option>
+                </select>
+                <select class="form-select-sm" id="filterCategory">
+                    <option value="all">Все категории</option>
+                </select>
+            </div>
+
+            <!-- Operations list -->
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h2 class="card-title">История операций</h2>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div class="table-responsive">
+                        <table class="table" id="transactionsTable">
+                            <thead>
+                                <tr>
+                                    <th>Дата</th>
+                                    <th>Тип</th>
+                                    <th>Категория</th>
+                                    <th>Сумма</th>
+                                    <th>Описание</th>
+                                    <th style="width: 80px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Dinamically rendered -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Add Transaction Drawer / Dialog -->
     <div class="modal-overlay" id="addModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Новая операция</h3>
+        <div class="modal-content card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="card-title">Новая операция</h2>
                 <button class="close-btn" id="btnCloseModal">&times;</button>
             </div>
-            <form id="addTxForm">
+            <form id="addTxForm" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem;">
                 <div class="form-group">
-                    <label class="form-label">Тип</label>
-                    <select class="form-select" id="txType">
-                        <option value="expense">Расход</option>
-                        <option value="income">Доход</option>
-                    </select>
+                    <label class="form-label">Тип операции</label>
+                    <div style="display: flex; gap: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="radio" name="txType" value="expense" checked> Расход
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="radio" name="txType" value="income"> Доход
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Сумма ($)</label>
