@@ -535,7 +535,7 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
   "intent": "ADD_TX" | "CORRECT_LAST" | "DELETE_LAST" | "QUERY_BALANCE" | "EXPORT_PDF" | "QUERY_TX" | "CHAT",
   "type": "expense" | "income",
   "amount": number_or_null,
-  "category": "Продукты и жилье (70/30)" | "Авто (50/50)" | "Кафешки (50/50)" | "Зарплата" | "Фриланс" | "прочее",
+  "category": "динамическое существительное в именительном падеже (например: продукты, бензин, химия, кафе, аренда, фриланс, зарплата, лекарства)",
   "new_amount": number_or_null,
   "new_category": string_or_null,
   "query_category": string_or_null,
@@ -756,24 +756,7 @@ def generate_pdf_report(filename="voicefinance_report.pdf"):
 def normalize_category(cat):
     if not cat:
         return "прочее"
-    c_clean = cat.strip().lower()
-    if "продукт" in c_clean or "жил" in c_clean or "70/30" in c_clean or "хими" in c_clean:
-        return "Продукты и жилье (70/30)"
-    if "авто" in c_clean or "машин" in c_clean or "50/50" in c_clean or "бенз" in c_clean or "заправ" in c_clean:
-        if "кафе" in c_clean or "кофе" in c_clean:
-            return "Кафешки (50/50)"
-        return "Авто (50/50)"
-    if "кафе" in c_clean or "кофе" in c_clean or "ресто" in c_clean or "бар" in c_clean:
-        return "Кафешки (50/50)"
-    if "зарплат" in c_clean or "оклад" in c_clean:
-        return "Зарплата"
-    if "фриланс" in c_clean or "freelance" in c_clean:
-        return "Фриланс"
-    
-    for std in ["Продукты и жилье (70/30)", "Авто (50/50)", "Кафешки (50/50)", "Зарплата", "Фриланс"]:
-        if std.lower() == c_clean:
-            return std
-    return cat
+    return cat.strip().lower()
 
 def save_transaction(tx_type, amount, category, raw, custom_date=None):
     category = normalize_category(category)

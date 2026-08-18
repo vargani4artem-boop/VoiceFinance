@@ -119,27 +119,6 @@ def init_db():
 
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
-    
-    # Normalize categories case-sensitivity in existing transactions
-    cursor.execute("UPDATE transactions SET category = 'Продукты и жилье (70/30)' WHERE LOWER(category) IN ('продукты и жилье (70/30)', 'продукты', 'жилье')")
-    cursor.execute("UPDATE transactions SET category = 'Авто (50/50)' WHERE LOWER(category) IN ('авто (50/50)', 'авто', 'машина')")
-    cursor.execute("UPDATE transactions SET category = 'Кафешки (50/50)' WHERE LOWER(category) IN ('кафешки (50/50)', 'кафешки', 'кафе')")
-    cursor.execute("UPDATE transactions SET category = 'Зарплата' WHERE LOWER(category) IN ('зарплата')")
-    cursor.execute("UPDATE transactions SET category = 'Фриланс' WHERE LOWER(category) IN ('фриланс')")
-    
-    cursor.execute('SELECT COUNT(*) FROM transactions')
-    if cursor.fetchone()[0] == 0:
-        import threading
-        def background_auto_import():
-            try:
-                import bot
-                print("[Auto-Import] Starting background import of default Google Sheet...")
-                bot.import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
-                print("[Auto-Import] Background import completed successfully.")
-            except Exception as e:
-                print(f"[Auto-Import Error] Failed to auto-import default sheet: {e}")
-                
-        threading.Thread(target=background_auto_import, daemon=True).start()
 
     conn.commit()
     conn.close()
@@ -331,24 +310,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
 def normalize_category(cat):
     if not cat:
         return "прочее"
-    c_clean = cat.strip().lower()
-    if "продукт" in c_clean or "жил" in c_clean or "70/30" in c_clean or "хими" in c_clean:
-        return "Продукты и жилье (70/30)"
-    if "авто" in c_clean or "машин" in c_clean or "50/50" in c_clean or "бенз" in c_clean or "заправ" in c_clean:
-        if "кафе" in c_clean or "кофе" in c_clean:
-            return "Кафешки (50/50)"
-        return "Авто (50/50)"
-    if "кафе" in c_clean or "кофе" in c_clean or "ресто" in c_clean or "бар" in c_clean:
-        return "Кафешки (50/50)"
-    if "зарпат" in c_clean or "оклад" in c_clean:
-        return "Зарплата"
-    if "фриланс" in c_clean or "freelance" in c_clean:
-        return "Фриланс"
-    
-    for std in ["Продукты и жилье (70/30)", "Automotive", "Авто (50/50)", "Кафешки (50/50)", "Зарплата", "Фриланс"]:
-        if std.lower() == c_clean:
-            return std
-    return cat
+    return cat.strip().lower()
 
     def add_transaction(self, data):
         tx_type = data.get('type', 'expense')

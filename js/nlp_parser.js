@@ -83,15 +83,27 @@ class NLUParser {
      * Match category from text
      */
     matchCategory(text, defaultType = 'expense') {
-        const lower = text.toLowerCase();
-        for (const [catName, keywords] of Object.entries(this.categoryKeywords)) {
-            for (const kw of keywords) {
-                if (lower.includes(kw)) {
-                    return catName;
-                }
-            }
+        const clean = text.trim().toLowerCase();
+        
+        // Match prepositions followed by a word
+        const match = clean.match(/(?:на|за|под|для|купил|оплатил|доход)\s+([а-яёa-z]+)/i);
+        if (match && match[1]) {
+            let word = match[1].trim();
+            if (word.endsWith('ию')) word = word.slice(0, -2) + 'ия';
+            else if (word.endsWith('у')) word = word.slice(0, -1) + 'а';
+            return word;
         }
-        return defaultType === 'income' ? 'Зарплата' : 'прочее';
+        
+        // Fallback to filtering keywords
+        const words = clean.split(/\s+/).filter(w => !w.match(/\d+/) && w !== 'долларов' && w !== 'доллара' && w !== 'доллар' && w !== 'гривен' && w !== 'гривны' && w !== 'гривна' && w !== 'запиши' && w !== 'внеси' && w !== 'потратил' && w !== 'расход' && w !== 'доход');
+        if (words.length > 0) {
+            let lastWord = words[words.length - 1];
+            if (lastWord.endsWith('ию')) lastWord = lastWord.slice(0, -2) + 'ия';
+            else if (lastWord.endsWith('у')) lastWord = lastWord.slice(0, -1) + 'а';
+            return lastWord;
+        }
+        
+        return defaultType === 'income' ? 'зарплата' : 'прочее';
     }
 
     /**
