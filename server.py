@@ -131,6 +131,22 @@ def init_db():
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
 
+    # Trigger fallback sheet import and Telegram backup if transactions are empty
+    cursor.execute('SELECT COUNT(*) FROM transactions')
+    if cursor.fetchone()[0] == 0:
+        import threading
+        def background_auto_import():
+            try:
+                import bot
+                print("[Auto-Import] Transactions table empty. Running fallback Google Sheet import...")
+                bot.import_google_sheet("1K7icTbNknhsP7bT0QK1eoK6VY22U0NJ9_lwKZMqtSpE", 0)
+                print("[Auto-Import] Fallback Google Sheet import completed. Backing up to Telegram...")
+                import persistence
+                persistence.backup_db()
+            except Exception as e:
+                print(f"[Auto-Import Error] Fallback import failed: {e}")
+        threading.Thread(target=background_auto_import, daemon=True).start()
+
     conn.commit()
     conn.close()
 
