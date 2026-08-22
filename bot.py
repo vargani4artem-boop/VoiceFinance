@@ -771,6 +771,13 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None):
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
+    
+    try:
+        import persistence
+        persistence.async_backup()
+    except Exception as e:
+        print(f"[Backup Trigger Error] {e}")
+        
     return new_id
 
 def correct_last_transaction(new_amount=None, new_category=None):
@@ -785,6 +792,13 @@ def correct_last_transaction(new_amount=None, new_category=None):
         cursor.execute("UPDATE transactions SET amount = ?, category = ? WHERE id = ?", (updated_amt, updated_cat, tx_id))
         conn.commit()
         conn.close()
+        
+        try:
+            import persistence
+            persistence.async_backup()
+        except Exception as e:
+            print(f"[Backup Trigger Error] {e}")
+            
         return updated_amt, updated_cat
     conn.close()
     return None, None
@@ -798,6 +812,13 @@ def delete_last_transaction():
         cursor.execute("DELETE FROM transactions WHERE id = ?", (row[0],))
         conn.commit()
         conn.close()
+        
+        try:
+            import persistence
+            persistence.async_backup()
+        except Exception as e:
+            print(f"[Backup Trigger Error] {e}")
+            
         return row[1], row[2]
     conn.close()
     return None, None

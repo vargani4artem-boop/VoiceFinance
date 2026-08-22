@@ -36,6 +36,12 @@ def normalize_category(cat):
     return cat.strip().lower()
 
 def init_db():
+    try:
+        import persistence
+        persistence.restore_db()
+    except Exception as e:
+        print(f"[Init DB Restore Error] {e}")
+        
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -286,6 +292,13 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
                 
             conn.commit()
             conn.close()
+            
+            try:
+                import persistence
+                persistence.async_backup()
+            except Exception as e:
+                print(f"[Backup Trigger Error] {e}")
+                
             self.send_json({'success': True})
         except Exception as e:
             self.send_json({'success': False, 'error': str(e)}, status=500)
@@ -335,6 +348,12 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         new_id = cursor.lastrowid
         conn.close()
 
+        try:
+            import persistence
+            persistence.async_backup()
+        except Exception as e:
+            print(f"[Backup Trigger Error] {e}")
+
         self.send_json({'success': True, 'data': {
             'id': new_id, 'type': tx_type, 'amount': amount, 'currency': currency,
             'category': category, 'description': description, 'raw_voice': raw_voice,
@@ -347,6 +366,13 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         cursor.execute('DELETE FROM transactions WHERE id = ?', (tx_id,))
         conn.commit()
         conn.close()
+        
+        try:
+            import persistence
+            persistence.async_backup()
+        except Exception as e:
+            print(f"[Backup Trigger Error] {e}")
+            
         self.send_json({'success': True, 'message': 'Transaction deleted'})
 
     def get_categories(self):
