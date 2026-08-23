@@ -146,6 +146,52 @@ def init_db():
             except Exception as e:
                 print(f"[Auto-Import Error] Fallback import failed: {e}")
         threading.Thread(target=background_auto_import, daemon=True).start()
+    # TEMPORARY CODE: Force reset database with the user's correct chat transactions
+    force_reset = True
+    if force_reset:
+        cursor.execute("DELETE FROM transactions")
+        import datetime
+        now_str = datetime.datetime.now().isoformat()
+        real_txs = [
+            # Incomes
+            ('income', 1786.0, 'USD', 'зарплата', 'Зарплата', 'Зарплата', '2026-08-21', now_str),
+            
+            # Expenses
+            ('expense', 70.0, 'USD', 'кафешки (50/50)', '70 дол кафе', '70 дол кафе', '2026-08-14', now_str),
+            ('expense', 70.0, 'USD', 'кафешки (50/50)', 'Запиши 70 долларов на кафе.', 'Запиши 70 долларов на кафе.', '2026-08-14', now_str),
+            ('expense', 75.0, 'USD', 'авто (50/50)', '75 бенз', '75 бенз', '2026-08-15', now_str),
+            ('expense', 17.0, 'USD', 'кафешки (50/50)', '17 кафе', '17 кафе', '2026-08-15', now_str),
+            ('expense', 22.0, 'USD', 'витамины', '- 22 витамины', '- 22 витамины', '2026-08-16', now_str),
+            ('expense', 529.0, 'USD', 'rawrium', 'Зарегистрирую 529 долларов на членство в Rawrium.', 'Зарегистрирую 529 долларов на членство в Rawrium.', '2026-08-16', now_str),
+            ('expense', 67.0, 'USD', 'кафешки (50/50)', '67, не сем', '67, не сем', '2026-08-16', now_str),
+            ('expense', 112.0, 'USD', 'авто (50/50)', '112 дол бенз запиши', '112 дол бенз запиши', '2026-08-16', now_str),
+            ('expense', 21.0, 'USD', 'прочее', 'Да нет, 21 доллар расходы на мороженное', 'Да нет, 21 доллар расходы на мороженное', '2026-08-16', now_str),
+            ('expense', 14.0, 'USD', 'кафешки (50/50)', '14 дол кафе', '14 дол кафе', '2026-08-17', now_str),
+            ('expense', 25.0, 'USD', 'продукты и жилье (70/30)', 'Продукты', 'Продукты', '2026-08-17', now_str),
+            ('expense', 25.0, 'USD', 'прочее', 'Занеси расход 25', 'Занеси расход 25', '2026-08-17', now_str),
+            ('expense', 125.0, 'USD', 'авто (50/50)', '125 долларов на бензин', '125 долларов на бензин и 100 долларов на консультацию бухгалтера', '2026-08-17', now_str),
+            ('expense', 100.0, 'USD', 'бухгалтер', '100 долларов на консультацию бухгалтера', '125 долларов на бензин и 100 долларов на консультацию бухгалтера', '2026-08-17', now_str),
+            ('expense', 31.0, 'USD', 'витамины', '31 дол витамины', '31 дол витамины', '2026-08-18', now_str),
+            ('expense', 82.0, 'USD', 'продукты', '82 продукты', '82 продукты', '2026-08-18', now_str),
+            ('expense', 20.0, 'USD', 'кафешки (50/50)', '20 кафе', '20 кафе', '2026-08-19', now_str),
+            ('expense', 500.0, 'USD', 'кредит', 'Отправил за кредит 500 дол', 'Отправил за кредит 500 дол и 550 дол алименты', '2026-08-21', now_str),
+            ('expense', 550.0, 'USD', 'алименты', '550 дол алименты', 'Отправил за кредит 500 дол и 550 дол алименты', '2026-08-21', now_str),
+            ('expense', 600.0, 'USD', 'кредитки', 'По 600 дол на кредитки', 'По 600 дол на кредитки', '2026-08-21', now_str),
+            ('expense', 22.0, 'USD', 'продукты', '22 продукти', '22 продукти', '2026-08-22', now_str),
+            ('expense', 55.0, 'USD', 'продукты', '55 на продукты', '55 на продукты', '2026-08-22', now_str)
+        ]
+        cursor.executemany('''
+            INSERT INTO transactions (type, amount, currency, category, description, raw_voice, date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', real_txs)
+        
+        import threading
+        def do_backup():
+            import time
+            time.sleep(3)
+            import persistence
+            persistence.backup_db()
+        threading.Thread(target=do_backup, daemon=True).start()
 
     conn.commit()
     conn.close()
