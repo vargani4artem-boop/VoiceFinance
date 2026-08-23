@@ -894,7 +894,8 @@ class TelegramBot:
             payload['reply_markup'] = {
                 "keyboard": [
                     [{"text": "📊 Сводка за месяц"}, {"text": "💼 Мой баланс"}],
-                    [{"text": "🔄 Отменить запись"}, {"text": "📄 Экспорт в PDF"}]
+                    [{"text": "🔄 Отменить запись"}, {"text": "📄 Экспорт в PDF"}],
+                    [{"text": "Долг"}]
                 ],
                 "resize_keyboard": True
             }
@@ -1266,6 +1267,11 @@ class TelegramBot:
                     gemini_res = {
                         "intent": "EXPORT_PDF",
                         "ai_reply": "Экспортировал отчет!"
+                    }
+                elif text == "Долг":
+                    gemini_res = {
+                        "intent": "CHAT",
+                        "ai_reply": "📝 Пожалуйста, надиктуйте или напишите сумму долга. Например: <b>«Долг 500 долларов»</b> или <b>«Внеси долг 200»</b>."
                     }
                 else:
                     gemini_res = ask_gemini_brain(user_text=text, chat_id=chat_id)
