@@ -147,7 +147,7 @@ def init_db():
                 print(f"[Auto-Import Error] Fallback import failed: {e}")
         threading.Thread(target=background_auto_import, daemon=True).start()
     # TEMPORARY CODE: Force reset database with the user's correct chat transactions
-    force_reset = False
+    force_reset = True
     if force_reset:
         cursor.execute("DELETE FROM transactions")
         import datetime
@@ -173,9 +173,9 @@ def init_db():
             ('expense', 31.0, 'USD', 'витамины', '31 дол витамины', '31 дол витамины', '2026-08-18', now_str),
             ('expense', 82.0, 'USD', 'продукты', '82 продукты', '82 продукты', '2026-08-18', now_str),
             ('expense', 20.0, 'USD', 'кафе', '20 кафе', '20 кафе', '2026-08-19', now_str),
-            ('expense', 500.0, 'USD', 'кредит', 'Отправил за кредит 500 дол', 'Отправил за кредит 500 дол и 550 дол алименты', '2026-08-21', now_str),
+            ('expense', 500.0, 'USD', 'кредит (укр)', 'Отправил за кредит 500 дол', 'Отправил за кредит 500 дол и 550 дол алименты', '2026-08-21', now_str),
             ('expense', 550.0, 'USD', 'алименты', '550 дол алименты', 'Отправил за кредит 500 дол и 550 дол алименты', '2026-08-21', now_str),
-            ('expense', 600.0, 'USD', 'кредитки', 'По 600 дол на кредитки', 'По 600 дол на кредитки', '2026-08-21', now_str),
+            ('expense', 600.0, 'USD', 'кредитки (канад)', 'По 600 дол на кредитки', 'По 600 дол на кредитки', '2026-08-21', now_str),
             ('expense', 22.0, 'USD', 'продукты', '22 продукти', '22 продукти', '2026-08-22', now_str),
             ('expense', 55.0, 'USD', 'продукты', '55 на продукты', '55 на продукты', '2026-08-22', now_str)
         ]
