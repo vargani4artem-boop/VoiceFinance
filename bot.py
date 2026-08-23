@@ -758,6 +758,90 @@ def normalize_category(cat):
         return "прочее"
     return cat.strip().lower()
 
+def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
+    try:
+        cat_lower = str(category).lower()
+        is_uah = ('укр' in cat_lower or 'грив' in cat_lower or 'uah' in cat_lower)
+        
+        # 1 USD is ~1.35 CAD and ~41.0 UAH
+        multiplier = 41.0 if is_uah else 1.35
+        amt_local = float(amount) * multiplier
+        
+        is_expense = (tx_type == 'expense')
+        if is_rollback:
+            is_expense = not is_expense
+            
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        if is_expense:
+            # We increase debt (decrease credit_remaining, increase balance)
+            if is_uah:
+                card_names = ("Гривневая карта 1", "Гривневая карта 2")
+            else:
+                card_names = ("Канадская карта 1", "Канадская карта 2", "Канадская карта 3")
+                
+            placeholders = ",".join("?" for _ in card_names)
+            cursor.execute(f"SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE name IN ({placeholders}) ORDER BY id ASC", card_names)
+            cards = cursor.fetchall()
+            
+            remaining_to_charge = amt_local
+            for card_id, limit, remaining, bal in cards:
+                if limit > 0 and remaining > 0:
+                    charge = min(remaining, remaining_to_charge)
+                    new_remaining = remaining - charge
+                    new_bal = limit - new_remaining
+                    cursor.execute("UPDATE accounts SET credit_remaining = ?, balance = ?, updated_at = ? WHERE id = ?", (new_remaining, new_bal, datetime.now().isoformat(), card_id))
+                    remaining_to_charge -= charge
+                    if remaining_to_charge <= 0:
+                        break
+                elif limit == 0:
+                    # Unlimited debt card (loans/debts)
+                    new_bal = bal + remaining_to_charge
+                    cursor.execute("UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, datetime.now().isoformat(), card_id))
+                    remaining_to_charge = 0
+                    break
+                    
+            if remaining_to_charge > 0 and cards:
+                # Add overflow debt to the last card
+                last_card_id, limit, remaining, bal = cards[-1]
+                new_remaining = remaining - remaining_to_charge
+                new_bal = limit - new_remaining
+                cursor.execute("UPDATE accounts SET credit_remaining = ?, balance = ?, updated_at = ? WHERE id = ?", (new_remaining, new_bal, datetime.now().isoformat(), last_card_id))
+        else:
+            # We decrease debt (increase credit_remaining, decrease balance)
+            if is_uah:
+                card_names = ("Гривневая карта 1", "Гривневая карта 2")
+            else:
+                card_names = ("Канадская карта 1", "Канадская карта 2", "Канадская карта 3")
+                
+            placeholders = ",".join("?" for _ in card_names)
+            cursor.execute(f"SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE name IN ({placeholders}) ORDER BY id ASC", card_names)
+            cards = cursor.fetchall()
+            
+            remaining_to_repay = amt_local
+            for card_id, limit, remaining, bal in cards:
+                if limit > 0:
+                    owed = limit - remaining
+                    if owed > 0:
+                        repay = min(owed, remaining_to_repay)
+                        new_remaining = remaining + repay
+                        new_bal = limit - new_remaining
+                        cursor.execute("UPDATE accounts SET credit_remaining = ?, balance = ?, updated_at = ? WHERE id = ?", (new_remaining, new_bal, datetime.now().isoformat(), card_id))
+                        remaining_to_repay -= repay
+                        if remaining_to_repay <= 0:
+                            break
+                else:
+                    new_bal = max(0.0, bal - remaining_to_repay)
+                    cursor.execute("UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?", (new_bal, datetime.now().isoformat(), card_id))
+                    remaining_to_repay = 0
+                    break
+                    
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[adjust_accounts_debt error] {e}")
+
 def save_transaction(tx_type, amount, category, raw, custom_date=None):
     category = normalize_category(category)
     conn = sqlite3.connect(DB_FILE)
@@ -772,6 +856,9 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None):
     new_id = cursor.lastrowid
     conn.close()
     
+    # Adjust account debt
+    adjust_accounts_debt(tx_type, amount, category)
+    
     try:
         import persistence
         persistence.async_backup()
@@ -783,15 +870,22 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None):
 def correct_last_transaction(new_amount=None, new_category=None):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, amount, category FROM transactions ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT id, amount, category, type FROM transactions ORDER BY id DESC LIMIT 1")
     row = cursor.fetchone()
     if row:
-        tx_id, old_amt, old_cat = row
+        tx_id, old_amt, old_cat, old_type = row
         updated_amt = new_amount if new_amount is not None else old_amt
         updated_cat = new_category if new_category is not None else old_cat
+        
+        # Rollback old debt impact
+        adjust_accounts_debt(old_type, old_amt, old_cat, is_rollback=True)
+        
         cursor.execute("UPDATE transactions SET amount = ?, category = ? WHERE id = ?", (updated_amt, updated_cat, tx_id))
         conn.commit()
         conn.close()
+        
+        # Apply new debt impact
+        adjust_accounts_debt(old_type, updated_amt, updated_cat)
         
         try:
             import persistence
@@ -806,10 +900,15 @@ def correct_last_transaction(new_amount=None, new_category=None):
 def delete_last_transaction():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, category, amount FROM transactions ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT id, category, amount, type FROM transactions ORDER BY id DESC LIMIT 1")
     row = cursor.fetchone()
     if row:
-        cursor.execute("DELETE FROM transactions WHERE id = ?", (row[0],))
+        tx_id, cat, amt, tx_type = row
+        
+        # Rollback debt impact
+        adjust_accounts_debt(tx_type, amt, cat, is_rollback=True)
+        
+        cursor.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         conn.commit()
         conn.close()
         
@@ -819,7 +918,7 @@ def delete_last_transaction():
         except Exception as e:
             print(f"[Backup Trigger Error] {e}")
             
-        return row[1], row[2]
+        return cat, amt
     conn.close()
     return None, None
 
@@ -988,20 +1087,22 @@ class TelegramBot:
             elif intent == 'QUERY_BALANCE':
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
-                cursor.execute("SELECT name, type, currency, balance, credit_limit, credit_remaining FROM accounts")
+                cursor.execute("SELECT name, type, currency, balance FROM accounts")
                 accounts = cursor.fetchall()
                 conn.close()
                 
                 assets = []
-                debts = []
-                for acc in accounts:
-                    name, acc_type, currency, bal, limit, remaining = acc
+                debt_uah = 0.0
+                debt_cad = 0.0
+                
+                for name, acc_type, currency, bal in accounts:
                     if acc_type == 'asset':
-                        assets.append(f"• <b>{name}</b>: {bal:,.2f} {currency}")
+                        assets.append(f"• <b>{name}</b>: ${bal:,.2f} {currency}")
                     else:
-                        used = limit - remaining if limit else bal
-                        assets_detail = f"• <b>{name}</b>: использовано {used:,.2f} {currency} (лимит {limit:,.2f} {currency})" if limit else f"• <b>{name}</b>: долг {bal:,.2f} {currency}"
-                        debts.append(assets_detail)
+                        if currency == 'UAH':
+                            debt_uah += bal
+                        elif currency == 'CAD':
+                            debt_cad += bal
                         
                 income, expense, balance = get_analytics()
                 
@@ -1012,12 +1113,10 @@ class TelegramBot:
                 else:
                     report += "• Нет активов\n"
                     
-                report += "\n💳 <b>Кредитные карты и долги:</b>\n"
-                if debts:
-                    report += "\n".join(debts) + "\n"
-                else:
-                    report += "• Нет долгов\n"
-                    
+                report += "\n💳 <b>Долги по картам:</b>\n"
+                report += f"• <b>Долг по гривневым картам</b>: {debt_uah:,.2f} UAH\n"
+                report += f"• <b>Долг по канадским картам</b>: {debt_cad:,.2f} CAD\n"
+                
                 report += f"\n📊 <b>Сводка за август:</b>\n"
                 report += f"🟢 Доходы: ${income:,.2f}\n"
                 report += f"🔴 Расходы: ${expense:,.2f}\n"
