@@ -890,7 +890,15 @@ class TelegramBot:
 
     def send_message(self, chat_id, text, reply_markup=None):
         payload = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
-        if reply_markup:
+        if reply_markup is None:
+            payload['reply_markup'] = {
+                "keyboard": [
+                    [{"text": "📊 Сводка за месяц"}, {"text": "💼 Мой баланс"}],
+                    [{"text": "🔄 Отменить запись"}, {"text": "📄 Экспорт в PDF"}]
+                ],
+                "resize_keyboard": True
+            }
+        else:
             payload['reply_markup'] = reply_markup
         return self.send_request('sendMessage', payload)
 
@@ -974,6 +982,47 @@ class TelegramBot:
                 income, expense, balance = get_analytics()
                 full_reply = f"{prefix}🗑️ {ai_reply}\n\n💳 <b>Баланс: ${balance:,.2f}</b>"
                 self.send_message(chat_id, full_reply)
+                return
+
+            elif intent == 'QUERY_BALANCE':
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name, type, currency, balance, credit_limit, credit_remaining FROM accounts")
+                accounts = cursor.fetchall()
+                conn.close()
+                
+                assets = []
+                debts = []
+                for acc in accounts:
+                    name, acc_type, currency, bal, limit, remaining = acc
+                    if acc_type == 'asset':
+                        assets.append(f"• <b>{name}</b>: {bal:,.2f} {currency}")
+                    else:
+                        used = limit - remaining if limit else bal
+                        assets_detail = f"• <b>{name}</b>: использовано {used:,.2f} {currency} (лимит {limit:,.2f} {currency})" if limit else f"• <b>{name}</b>: долг {bal:,.2f} {currency}"
+                        debts.append(assets_detail)
+                        
+                income, expense, balance = get_analytics()
+                
+                report = f"{prefix}💼 <b>Состояние ваших счетов:</b>\n\n"
+                report += "💰 <b>Активы и резервы:</b>\n"
+                if assets:
+                    report += "\n".join(assets) + "\n"
+                else:
+                    report += "• Нет активов\n"
+                    
+                report += "\n💳 <b>Кредитные карты и долги:</b>\n"
+                if debts:
+                    report += "\n".join(debts) + "\n"
+                else:
+                    report += "• Нет долгов\n"
+                    
+                report += f"\n📊 <b>Сводка за август:</b>\n"
+                report += f"🟢 Доходы: ${income:,.2f}\n"
+                report += f"🔴 Расходы: ${expense:,.2f}\n"
+                report += f"⚖️ Баланс: ${balance:,.2f}\n"
+                
+                self.send_message(chat_id, report)
                 return
 
             elif intent == 'QUERY_TX':
@@ -1191,7 +1240,36 @@ class TelegramBot:
                     USER_CHAT_HISTORY[chat_id] = []
                 USER_CHAT_HISTORY[chat_id].append({'user': text})
 
-                gemini_res = ask_gemini_brain(user_text=text, chat_id=chat_id)
+                # Fast rule-based interceptors for custom reply keyboard menu buttons
+                if text == "📊 Сводка за месяц":
+                    import datetime
+                    now = datetime.datetime.now()
+                    first_day = now.replace(day=1).strftime('%Y-%m-%d')
+                    last_day = (now.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+                    last_day_str = last_day.strftime('%Y-%m-%d')
+                    gemini_res = {
+                        "intent": "QUERY_TX",
+                        "query_start_date": first_day,
+                        "query_end_date": last_day_str,
+                        "query_period_description": "за текущий месяц"
+                    }
+                elif text == "💼 Мой баланс":
+                    gemini_res = {
+                        "intent": "QUERY_BALANCE"
+                    }
+                elif text == "🔄 Отменить запись":
+                    gemini_res = {
+                        "intent": "DELETE_LAST",
+                        "ai_reply": "Последняя транзакция успешно удалена!"
+                    }
+                elif text == "📄 Экспорт в PDF":
+                    gemini_res = {
+                        "intent": "EXPORT_PDF",
+                        "ai_reply": "Экспортировал отчет!"
+                    }
+                else:
+                    gemini_res = ask_gemini_brain(user_text=text, chat_id=chat_id)
+                
                 self.process_ai_result(chat_id, gemini_res, raw_input=text)
         except Exception as e:
             err_str = str(e)
