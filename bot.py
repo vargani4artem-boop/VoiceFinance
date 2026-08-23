@@ -760,11 +760,10 @@ def normalize_category(cat):
 
 def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
     try:
-        cat_lower = str(category).lower()
-        is_uah = ('укр' in cat_lower or 'грив' in cat_lower or 'uah' in cat_lower)
+        is_uah = False
         
-        # 1 USD is ~1.35 CAD and ~41.0 UAH
-        multiplier = 41.0 if is_uah else 1.35
+        # 1 USD is ~1.35 CAD
+        multiplier = 1.35
         amt_local = float(amount) * multiplier
         
         is_expense = (tx_type == 'expense')
