@@ -63,9 +63,24 @@ def backup_db(chat_id=DEFAULT_CHAT_ID):
         os.remove(backup_temp)
         
     if res and res.get("ok"):
-        msg_id = res["result"]["message_id"]
-        send_request("pinChatMessage", payload={"chat_id": chat_id, "message_id": msg_id, "disable_notification": "true"})
-        print(f"[Backup Success] Database pinned in chat {chat_id}")
+        new_msg_id = res["result"]["message_id"]
+        
+        # Fetch current chat info to find and delete the old pinned backup message
+        chat_info = send_request("getChat", payload={"chat_id": chat_id})
+        old_msg_id = None
+        if chat_info and chat_info.get("ok"):
+            pinned = chat_info["result"].get("pinned_message")
+            if pinned:
+                old_msg_id = pinned.get("message_id")
+        
+        # Pin the new backup
+        send_request("pinChatMessage", payload={"chat_id": chat_id, "message_id": new_msg_id, "disable_notification": "true"})
+        
+        # Delete the old backup message if found to keep the chat clean
+        if old_msg_id:
+            send_request("deleteMessage", payload={"chat_id": chat_id, "message_id": old_msg_id})
+            
+        print(f"[Backup Success] Database pinned and old backup deleted in chat {chat_id}")
         return True
     else:
         print(f"[Backup Failed] Failed to send document to chat {chat_id}")
