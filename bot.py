@@ -978,15 +978,16 @@ class TelegramBot:
 
             elif intent == 'QUERY_TX':
                 q_cat = gemini_res.get('query_category')
-                q_months = gemini_res.get('query_months_count')
+                start_date = gemini_res.get('query_start_date')
+                end_date = gemini_res.get('query_end_date')
+                period_desc = gemini_res.get('query_period_description') or "за указанный период"
                 
-                months_val = int(q_months) if q_months else None
                 cat_val = str(q_cat).strip().lower() if q_cat else None
                 
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
                 
-                # Fetch distinct categories to do fuzzy matching in Python
+                # Fetch distinct categories to do fuzzy matching if a category filter is requested
                 cursor.execute("SELECT DISTINCT category FROM transactions")
                 db_cats = [r[0] for r in cursor.fetchall()]
                 
@@ -997,57 +998,77 @@ class TelegramBot:
                         if cat_val in db_cat_lower or db_cat_lower in cat_val:
                             matched_cats.append(db_cat)
                         else:
-                            # Match using first 4 characters to handle declensions (e.g. "автомобиль" vs "авто")
                             prefix_query = cat_val[:4]
                             prefix_db = db_cat_lower[:4]
                             if len(prefix_query) >= 3 and len(prefix_db) >= 3 and (prefix_query in db_cat_lower or prefix_db in cat_val):
                                 matched_cats.append(db_cat)
-                                
-                sql = "SELECT SUM(amount) FROM transactions WHERE type='expense'"
-                params = []
                 
+                # Build SQL for expenses grouped by category
+                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense'"
+                params_exp = []
+                
+                if start_date:
+                    sql_exp += " AND date >= ?"
+                    params_exp.append(start_date)
+                if end_date:
+                    sql_exp += " AND date <= ?"
+                    params_exp.append(end_date)
+                    
                 if cat_val:
                     if matched_cats:
                         placeholders = ",".join("?" for _ in matched_cats)
-                        sql += f" AND category IN ({placeholders})"
-                        params.extend(matched_cats)
+                        sql_exp += f" AND category IN ({placeholders})"
+                        params_exp.extend(matched_cats)
                     else:
-                        sql += " AND LOWER(category) LIKE ?"
-                        params.append(f"%{cat_val}%")
+                        sql_exp += " AND LOWER(category) LIKE ?"
+                        params_exp.append(f"%{cat_val}%")
                         
-                if months_val:
-                    sql += " AND date >= date('now', ?)"
-                    params.append(f"-{months_val} month")
+                sql_exp += " GROUP BY category ORDER BY SUM(amount) DESC"
+                cursor.execute(sql_exp, params_exp)
+                expenses_grouped = cursor.fetchall()
+                
+                # Build SQL for incomes
+                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income'"
+                params_inc = []
+                
+                if start_date:
+                    sql_inc += " AND date >= ?"
+                    params_inc.append(start_date)
+                if end_date:
+                    sql_inc += " AND date <= ?"
+                    params_inc.append(end_date)
                     
-                cursor.execute(sql, params)
-                res_sum = cursor.fetchone()[0] or 0.0
+                cursor.execute(sql_inc, params_inc)
+                total_income = cursor.fetchone()[0] or 0.0
+                
+                # Total expenses sum
+                total_expense = sum(float(r[1]) for r in expenses_grouped)
+                
                 conn.close()
                 
-                desc_period = f"за последние {months_val} мес." if months_val else "за всё время"
-                desc_category = f"на категорию «{matched_cats[0]}»" if matched_cats else (f"на категорию «{cat_val.capitalize()}»" if cat_val else "на все расходы")
+                # Build a detailed text report
+                ans_text = f"{prefix}📊 <b>Сводка расходов {period_desc}:</b>\n\n"
                 
-                web_link = "https://voicefinance.onrender.com"
-                query_params = []
-                if cat_val:
-                    query_params.append(f"category={urllib.parse.quote(cat_val)}")
-                if months_val:
-                    query_params.append(f"months={months_val}")
-                if query_params:
-                    web_link += "?" + "&".join(query_params)
+                if expenses_grouped:
+                    for cat, amt in expenses_grouped:
+                        ans_text += f"• <b>{cat.capitalize()}</b>: ${amt:,.2f}\n"
+                else:
+                    ans_text += "• Расходы отсутствуют 🟢\n"
                     
-                reply_markup = {
-                    "inline_keyboard": [[
-                        {"text": "📊 Посмотреть в WebApp", "web_app": {"url": web_link}}
-                    ]]
-                }
+                ans_text += f"\n🔴 <b>Всего расходов:</b> ${total_expense:,.2f}\n"
                 
-                ans_text = (
-                    f"{prefix}📊 <b>Анализ расходов</b> {desc_period}:\n\n"
-                    f"💸 Сумма {desc_category}: <b>${res_sum:,.2f}</b>\n\n"
-                    f"<i>{ai_reply}</i>\n\n"
-                    f"Перейдите по кнопке ниже, чтобы посмотреть детальный список и графики в веб-приложении."
-                )
-                self.send_message(chat_id, ans_text, reply_markup=reply_markup)
+                # Only show income/balance if no specific category was queried
+                if not cat_val:
+                    ans_text += f"🟢 <b>Всего доходов:</b> ${total_income:,.2f}\n"
+                    ans_text += f"⚖️ <b>Чистый баланс:</b> ${(total_income - total_expense):,.2f}\n"
+                else:
+                    desc_cat = matched_cats[0] if matched_cats else cat_val
+                    ans_text += f"\n<i>(Показаны только расходы в категории «{desc_cat}»)</i>\n"
+                    
+                if ai_reply:
+                    ans_text += f"\n💬 <i>{ai_reply}</i>"
+                    
+                self.send_message(chat_id, ans_text)
                 return
 
             else:
@@ -1115,7 +1136,7 @@ class TelegramBot:
 
         # Simple fallback response for record entry
         income, expense, balance = get_analytics()
-        self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>\nНажмите кнопку ниже для перехода в визуальный UI.")
+        self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>")
 
     def handle_update(self, update):
         try:
@@ -1131,20 +1152,14 @@ class TelegramBot:
             if text.startswith('/start') or text.startswith('/help'):
                 welcome = (
                     "<b>🎙️ Привет! Я твой голосовой AI-ассистент VoiceFinance.</b>\n\n"
-                    "Отправляй любые голосовые сообщения или текст на любые темы! Я воспринимаю всё: вопросы, разговоры, заметки, расходы, самоисправления и запросы круговых диаграмм/отчётов.\n\n"
+                    "Отправляй любые голосовые сообщения или текст на любые темы! Я воспринимаю всё: вопросы, разговоры, заметки, расходы, самоисправления и запросы отчётов/сводок.\n\n"
                     "<b>Например:</b>\n"
-                    "• 🎤 <i>«Покажи диаграмму расходов в процентах»</i>\n"
-                    "• 🎤 <i>«Запиши 1500 рублей на продукты»</i>\n"
-                    "• 🎤 <i>«Ой, смени последнюю категорию на бензин»</i>\n\n"
-                    "Нажмите кнопку ниже для перехода в визуальный UI!"
+                    "• 🎤 <i>«Сводка по всем расходам»</i>\n"
+                    "• 🎤 <i>«Запиши 50 долларов на продукты»</i>\n"
+                    "• 🎤 <i>«Сводка за последние 5 дней»</i>\n"
+                    "• 🎤 <i>«Смени последнюю категорию на бензин»</i>\n"
                 )
-                web_url = os.environ.get("WEB_APP_URL", "https://voicefinance.onrender.com")
-                reply_markup = {
-                    "inline_keyboard": [[
-                        {"text": "📱 Открыть VoiceFinance UI", "web_app": {"url": web_url}}
-                    ]]
-                }
-                self.send_message(chat_id, welcome, reply_markup)
+                self.send_message(chat_id, welcome)
                 return
 
             # Voice Message handling with Multimodal Gemini Speech-to-Text
