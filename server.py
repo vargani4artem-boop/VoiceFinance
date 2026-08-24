@@ -128,6 +128,10 @@ def init_db():
     # Migrate UAH accounts to debt if they exist as assets
     cursor.execute("UPDATE accounts SET type = 'debt' WHERE name IN ('Гривневая карта 1', 'Гривневая карта 2')")
 
+    # Migrate USD database records to CAD
+    cursor.execute("UPDATE transactions SET currency = 'CAD' WHERE currency = 'USD'")
+    cursor.execute("UPDATE accounts SET currency = 'CAD' WHERE currency = 'USD'")
+
     # Clean up old transactions (keep only August 2026 and later)
     cursor.execute("DELETE FROM transactions WHERE date < '2026-08-01'")
 
