@@ -762,8 +762,8 @@ def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
     try:
         is_uah = False
         
-        # 1 USD is ~1.35 CAD
-        multiplier = 1.35
+        # Transactions are already in CAD
+        multiplier = 1.0
         amt_local = float(amount) * multiplier
         
         is_expense = (tx_type == 'expense')
@@ -850,7 +850,7 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None):
     cursor.execute('''
         INSERT INTO transactions (type, amount, currency, category, description, raw_voice, date, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (tx_type, amount, 'USD', category, raw, raw, date_str, created_at))
+    ''', (tx_type, amount, 'CAD', category, raw, raw, date_str, created_at))
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
@@ -1307,17 +1307,17 @@ def check_and_add_monthly_recurring_expenses(chat_id):
         
         # Calculate interest: 31% annual on UAH cards debt
         interest_uah = (total_uah_debt * 0.31) / 12
-        interest_uah_usd = round(interest_uah / 41.0, 2)
+        interest_uah_cad = round(interest_uah / 30.0, 2)
         
         # Calculate interest: 24% annual on CAD cards debt
         interest_cad = (total_cad_debt * 0.24) / 12
-        interest_cad_usd = round(interest_cad / 1.35, 2)
+        interest_cad_cad = round(interest_cad, 2)
         
         # List of recurring expenses to add
         # Format: (amount, category, description)
         recurring = [
-            (interest_uah_usd, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
-            (interest_cad_usd, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
+            (interest_uah_cad, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
+            (interest_cad_cad, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
             (50.0, 'прочее', '[Auto-Recurring] Помощь'),
             (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
             (130.0, 'связь', '[Auto-Recurring] Связь'),
