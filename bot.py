@@ -933,6 +933,56 @@ def get_analytics():
     balance = income - expense
     return income, expense, balance
 
+def check_and_add_monthly_recurring_expenses(chat_id):
+    try:
+        import datetime
+        now = datetime.datetime.now()
+        month_prefix = now.strftime('%Y-%m') # e.g. "2026-08"
+        
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Check if already added for this month
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE date LIKE ? AND description LIKE '[Auto-Recurring]%'", (f"{month_prefix}-%",))
+        count = cursor.fetchone()[0]
+        if count > 0:
+            conn.close()
+            return
+            
+        # Get total UAH and CAD debt to calculate interest
+        cursor.execute("SELECT currency, SUM(balance) FROM accounts WHERE type='debt' GROUP BY currency")
+        balances = dict(cursor.fetchall())
+        total_uah_debt = balances.get('UAH', 0.0) or 0.0
+        total_cad_debt = balances.get('CAD', 0.0) or 0.0
+        conn.close()
+        
+        # Calculate interest: 31% annual on UAH cards debt
+        interest_uah = (total_uah_debt * 0.31) / 12
+        interest_uah_cad = round(interest_uah / 30.0, 2)
+        
+        # Calculate interest: 24% annual on CAD cards debt
+        interest_cad = (total_cad_debt * 0.24) / 12
+        interest_cad_cad = round(interest_cad, 2)
+        
+        # List of recurring expenses to add
+        # Format: (amount, category, description)
+        recurring = [
+            (interest_uah_cad, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
+            (interest_cad_cad, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
+            (50.0, 'прочее', '[Auto-Recurring] Помощь'),
+            (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
+            (130.0, 'связь', '[Auto-Recurring] Связь'),
+            (30.0, 'бензин', '[Auto-Recurring] Мост')
+        ]
+        
+        date_str = f"{month_prefix}-01"
+        for amt, cat, desc in recurring:
+            if amt > 0:
+                save_transaction('expense', amt, cat, desc, custom_date=date_str)
+                
+    except Exception as e:
+        print(f"[check_and_add_monthly_recurring_expenses error] {e}")
+
 class TelegramBot:
     def __init__(self, token):
         self.token = token
@@ -1281,56 +1331,6 @@ class TelegramBot:
             )
             self.send_message(chat_id, error_msg)
             return
-
-def check_and_add_monthly_recurring_expenses(chat_id):
-    try:
-        import datetime
-        now = datetime.datetime.now()
-        month_prefix = now.strftime('%Y-%m') # e.g. "2026-08"
-        
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # Check if already added for this month
-        cursor.execute("SELECT COUNT(*) FROM transactions WHERE date LIKE ? AND description LIKE '[Auto-Recurring]%'", (f"{month_prefix}-%",))
-        count = cursor.fetchone()[0]
-        if count > 0:
-            conn.close()
-            return
-            
-        # Get total UAH and CAD debt to calculate interest
-        cursor.execute("SELECT currency, SUM(balance) FROM accounts WHERE type='debt' GROUP BY currency")
-        balances = dict(cursor.fetchall())
-        total_uah_debt = balances.get('UAH', 0.0) or 0.0
-        total_cad_debt = balances.get('CAD', 0.0) or 0.0
-        conn.close()
-        
-        # Calculate interest: 31% annual on UAH cards debt
-        interest_uah = (total_uah_debt * 0.31) / 12
-        interest_uah_cad = round(interest_uah / 30.0, 2)
-        
-        # Calculate interest: 24% annual on CAD cards debt
-        interest_cad = (total_cad_debt * 0.24) / 12
-        interest_cad_cad = round(interest_cad, 2)
-        
-        # List of recurring expenses to add
-        # Format: (amount, category, description)
-        recurring = [
-            (interest_uah_cad, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
-            (interest_cad_cad, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
-            (50.0, 'прочее', '[Auto-Recurring] Помощь'),
-            (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
-            (130.0, 'связь', '[Auto-Recurring] Связь'),
-            (30.0, 'бензин', '[Auto-Recurring] Мост')
-        ]
-        
-        date_str = f"{month_prefix}-01"
-        for amt, cat, desc in recurring:
-            if amt > 0:
-                save_transaction('expense', amt, cat, desc, custom_date=date_str)
-                
-    except Exception as e:
-        print(f"[check_and_add_monthly_recurring_expenses error] {e}")
 
     def handle_update(self, update):
         try:
