@@ -1282,9 +1282,48 @@ class TelegramBot:
             self.send_message(chat_id, error_msg)
             return
 
-        # Simple fallback response for record entry
-        income, expense, balance = get_analytics()
-        self.send_message(chat_id, f"🎙️ Понял вашу запись!\n💳 Текущий баланс: <b>${balance:,.2f}</b>")
+def check_and_add_monthly_recurring_expenses(chat_id):
+    try:
+        import datetime
+        now = datetime.datetime.now()
+        month_prefix = now.strftime('%Y-%m') # e.g. "2026-08"
+        
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Check if already added for this month
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE date LIKE ? AND description LIKE '[Auto-Recurring]%'", (f"{month_prefix}-%",))
+        count = cursor.fetchone()[0]
+        if count > 0:
+            conn.close()
+            return
+            
+        # Get total UAH debt to calculate interest
+        cursor.execute("SELECT SUM(balance) FROM accounts WHERE currency = 'UAH'")
+        total_uah_debt = cursor.fetchone()[0] or 0.0
+        conn.close()
+        
+        # Calculate interest: 22% annual on UAH cards debt
+        interest_uah = (total_uah_debt * 0.22) / 12
+        interest_usd = round(interest_uah / 41.0, 2)
+        
+        # List of recurring expenses to add
+        # Format: (amount, category, description)
+        recurring = [
+            (interest_usd, 'проценты', '[Auto-Recurring] Проценты по кредиту (22% годовых)'),
+            (50.0, 'прочее', '[Auto-Recurring] Помощь'),
+            (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
+            (130.0, 'связь', '[Auto-Recurring] Связь'),
+            (30.0, 'бензин', '[Auto-Recurring] Мост')
+        ]
+        
+        date_str = f"{month_prefix}-01"
+        for amt, cat, desc in recurring:
+            if amt > 0:
+                save_transaction('expense', amt, cat, desc, custom_date=date_str)
+                
+    except Exception as e:
+        print(f"[check_and_add_monthly_recurring_expenses error] {e}")
 
     def handle_update(self, update):
         try:
@@ -1293,6 +1332,10 @@ class TelegramBot:
                 return
             
             chat_id = msg['chat']['id']
+            
+            # Automatically check and add monthly recurring expenses
+            check_and_add_monthly_recurring_expenses(chat_id)
+            
             text = msg.get('text', '')
             voice = msg.get('voice')
             
