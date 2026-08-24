@@ -924,7 +924,7 @@ def delete_last_transaction():
 def get_analytics():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT type, SUM(amount) FROM transactions GROUP BY type")
+    cursor.execute("SELECT type, SUM(amount) FROM transactions WHERE category NOT IN ('погашение', 'погашение долга') GROUP BY type")
     rows = dict(cursor.fetchall())
     conn.close()
     
@@ -1202,7 +1202,7 @@ class TelegramBot:
                                 matched_cats.append(db_cat)
                 
                 # Build SQL for expenses grouped by category
-                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense'"
+                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense' AND category NOT IN ('погашение', 'погашение долга')"
                 params_exp = []
                 
                 if start_date:
@@ -1226,7 +1226,7 @@ class TelegramBot:
                 expenses_grouped = cursor.fetchall()
                 
                 # Build SQL for incomes
-                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income'"
+                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income' AND category NOT IN ('погашение', 'погашение долга')"
                 params_inc = []
                 
                 if start_date:
