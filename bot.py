@@ -1298,19 +1298,26 @@ def check_and_add_monthly_recurring_expenses(chat_id):
             conn.close()
             return
             
-        # Get total UAH debt to calculate interest
-        cursor.execute("SELECT SUM(balance) FROM accounts WHERE currency = 'UAH'")
-        total_uah_debt = cursor.fetchone()[0] or 0.0
+        # Get total UAH and CAD debt to calculate interest
+        cursor.execute("SELECT currency, SUM(balance) FROM accounts WHERE type='debt' GROUP BY currency")
+        balances = dict(cursor.fetchall())
+        total_uah_debt = balances.get('UAH', 0.0) or 0.0
+        total_cad_debt = balances.get('CAD', 0.0) or 0.0
         conn.close()
         
-        # Calculate interest: 22% annual on UAH cards debt
-        interest_uah = (total_uah_debt * 0.22) / 12
-        interest_usd = round(interest_uah / 41.0, 2)
+        # Calculate interest: 31% annual on UAH cards debt
+        interest_uah = (total_uah_debt * 0.31) / 12
+        interest_uah_usd = round(interest_uah / 41.0, 2)
+        
+        # Calculate interest: 24% annual on CAD cards debt
+        interest_cad = (total_cad_debt * 0.24) / 12
+        interest_cad_usd = round(interest_cad / 1.35, 2)
         
         # List of recurring expenses to add
         # Format: (amount, category, description)
         recurring = [
-            (interest_usd, 'проценты', '[Auto-Recurring] Проценты по кредиту (22% годовых)'),
+            (interest_uah_usd, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
+            (interest_cad_usd, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
             (50.0, 'прочее', '[Auto-Recurring] Помощь'),
             (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
             (130.0, 'связь', '[Auto-Recurring] Связь'),
