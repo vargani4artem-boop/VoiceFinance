@@ -111,11 +111,11 @@ def init_db():
         import datetime
         now_str = datetime.datetime.now().isoformat()
         initial_accounts = [
-            ('Гривневая карта 1', 'debt', 'UAH', 246558.0, 0.0, 0.0, now_str),
+            ('Гривневая карта 1', 'debt', 'UAH', 229759.0, 0.0, 0.0, now_str),
             ('Гривневая карта 2', 'debt', 'UAH', 115694.0, 0.0, 0.0, now_str),
-            ('Канадская карта 1', 'debt', 'CAD', 3837.0, 7500.0, 3663.0, now_str),
-            ('Канадская карта 2', 'debt', 'CAD', 7891.0, 25000.0, 17109.0, now_str),
-            ('Канадская карта 3', 'debt', 'CAD', 4722.0, 7500.0, 2778.0, now_str),
+            ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
+            ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
+            ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
             ('Сберегательный счет', 'asset', 'CAD', 823.0, 0.0, 0.0, now_str),
             ('Личный аккаунт', 'asset', 'CAD', 609.0, 0.0, 0.0, now_str),
             ('Interactive Brokers', 'asset', 'CAD', 813.0, 0.0, 0.0, now_str)
@@ -154,6 +154,23 @@ def init_db():
     force_reset = True
     if force_reset:
         cursor.execute("DELETE FROM transactions")
+        cursor.execute("DELETE FROM accounts")
+        import datetime
+        now_str = datetime.datetime.now().isoformat()
+        initial_accounts = [
+            ('Гривневая карта 1', 'debt', 'UAH', 229759.0, 0.0, 0.0, now_str),
+            ('Гривневая карта 2', 'debt', 'UAH', 115694.0, 0.0, 0.0, now_str),
+            ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
+            ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
+            ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
+            ('Сберегательный счет', 'asset', 'CAD', 823.0, 0.0, 0.0, now_str),
+            ('Личный аккаунт', 'asset', 'CAD', 609.0, 0.0, 0.0, now_str),
+            ('Interactive Brokers', 'asset', 'CAD', 813.0, 0.0, 0.0, now_str)
+        ]
+        cursor.executemany('''
+            INSERT INTO accounts (name, type, currency, balance, credit_limit, credit_remaining, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', initial_accounts)
         import datetime
         now_str = datetime.datetime.now().isoformat()
         real_txs = [
