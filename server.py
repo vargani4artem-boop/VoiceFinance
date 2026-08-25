@@ -151,7 +151,7 @@ def init_db():
                 print(f"[Auto-Import Error] Fallback import failed: {e}")
         threading.Thread(target=background_auto_import, daemon=True).start()
     # TEMPORARY CODE: Force reset database with the user's correct chat transactions
-    force_reset = True
+    force_reset = False
     if force_reset:
         cursor.execute("DELETE FROM transactions")
         cursor.execute("DELETE FROM accounts")
