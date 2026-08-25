@@ -841,7 +841,7 @@ def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
     except Exception as e:
         print(f"[adjust_accounts_debt error] {e}")
 
-def save_transaction(tx_type, amount, category, raw, custom_date=None):
+def save_transaction(tx_type, amount, category, raw, custom_date=None, adjust_debt=True):
     category = normalize_category(category)
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -856,7 +856,8 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None):
     conn.close()
     
     # Adjust account debt
-    adjust_accounts_debt(tx_type, amount, category)
+    if adjust_debt:
+        adjust_accounts_debt(tx_type, amount, category)
     
     try:
         import persistence
@@ -978,7 +979,7 @@ def check_and_add_monthly_recurring_expenses(chat_id):
         date_str = f"{month_prefix}-01"
         for amt, cat, desc in recurring:
             if amt > 0:
-                save_transaction('expense', amt, cat, desc, custom_date=date_str)
+                save_transaction('expense', amt, cat, desc, custom_date=date_str, adjust_debt=False)
                 
     except Exception as e:
         print(f"[check_and_add_monthly_recurring_expenses error] {e}")
