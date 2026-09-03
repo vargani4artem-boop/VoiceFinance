@@ -239,40 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/migrate-repayments':
-            try:
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                
-                # Fix transactions
-                cursor.execute("UPDATE transactions SET type='income', category='погашение' WHERE id=1540")
-                cursor.execute("UPDATE transactions SET type='income', category='погашение укр' WHERE id=1537")
-                cursor.execute("UPDATE transactions SET type='income', category='сбережения' WHERE id=1539")
-                cursor.execute("UPDATE transactions SET type='income', category='инвестиции' WHERE id=1538")
-                
-                # Also catch any other recent transactions matching repayment descriptions
-                cursor.execute("UPDATE transactions SET type='income', category='погашение' WHERE description LIKE '%пополнил на канадские кредитки%'")
-                cursor.execute("UPDATE transactions SET type='income', category='погашение укр' WHERE description LIKE '%пополнил на укр кредитку%'")
-                
-                # Fix account balances
-                cursor.execute("UPDATE accounts SET balance = 3812.0, credit_remaining = 3688.0, updated_at = datetime('now') WHERE name = 'Канадская карта 1'")
-                cursor.execute("UPDATE accounts SET balance = 8312.0, credit_remaining = 16688.0, updated_at = datetime('now') WHERE name = 'Канадская карта 2'")
-                cursor.execute("UPDATE accounts SET balance = 4733.0, credit_remaining = 2767.0, updated_at = datetime('now') WHERE name = 'Канадская карта 3'")
-                cursor.execute("UPDATE accounts SET balance = 224869.0, updated_at = datetime('now') WHERE name = 'Гривневая карта 1'")
-                cursor.execute("UPDATE accounts SET balance = 115694.0, updated_at = datetime('now') WHERE name = 'Гривневая карта 2'")
-                cursor.execute("UPDATE accounts SET balance = 873.0, updated_at = datetime('now') WHERE name = 'Сберегательный счет'")
-                cursor.execute("UPDATE accounts SET balance = 863.0, updated_at = datetime('now') WHERE name = 'Interactive Brokers'")
-                cursor.execute("UPDATE accounts SET balance = 609.0, updated_at = datetime('now') WHERE name = 'Личный аккаунт'")
-                
-                conn.commit()
-                conn.close()
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "Repayments and account balances successfully fixed and backed up."})
-            except Exception as e:
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
