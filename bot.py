@@ -941,6 +941,32 @@ def delete_last_transaction():
     conn.close()
     return None, None
 
+MONTH_NAMES_RU = {
+    1: "январь", 2: "февраль", 3: "март", 4: "апрель",
+    5: "май", 6: "июнь", 7: "июль", 8: "август",
+    9: "сентябрь", 10: "октябрь", 11: "ноябрь", 12: "декабрь"
+}
+
+def get_current_month_analytics():
+    import datetime
+    now = datetime.datetime.now()
+    now_prefix = now.strftime('%Y-%m')
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT type, SUM(amount) FROM transactions 
+        WHERE date LIKE ? 
+          AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+        GROUP BY type
+    """, (f"{now_prefix}-%",))
+    rows = dict(cursor.fetchall())
+    conn.close()
+    inc = rows.get('income', 0.0) or 0.0
+    exp = rows.get('expense', 0.0) or 0.0
+    bal = inc - exp
+    month_name = MONTH_NAMES_RU.get(now.month, "текущий месяц")
+    return inc, exp, bal, month_name
+
 def get_current_month_balance():
     import datetime
     now_prefix = datetime.datetime.now().strftime('%Y-%m')
