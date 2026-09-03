@@ -239,21 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/fix-asset-balances':
-            try:
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE accounts SET balance = 0.0, updated_at = datetime('now') WHERE name = 'Личный аккаунт'")
-                cursor.execute("UPDATE accounts SET balance = 937.0, updated_at = datetime('now') WHERE name = 'Сберегательный счет'")
-                conn.commit()
-                conn.close()
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "Личный аккаунт set to 0 and Сберегательный счет set to 937."})
-            except Exception as e:
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
