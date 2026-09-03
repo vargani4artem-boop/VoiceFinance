@@ -116,9 +116,9 @@ def init_db():
             ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
             ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
             ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
-            ('Сберегательный счет', 'asset', 'CAD', 823.0, 0.0, 0.0, now_str),
-            ('Личный аккаунт', 'asset', 'CAD', 609.0, 0.0, 0.0, now_str),
-            ('Interactive Brokers', 'asset', 'CAD', 813.0, 0.0, 0.0, now_str)
+            ('Сберегательный счет', 'asset', 'CAD', 937.0, 0.0, 0.0, now_str),
+            ('Личный аккаунт', 'asset', 'CAD', 0.0, 0.0, 0.0, now_str),
+            ('Interactive Brokers', 'asset', 'CAD', 863.0, 0.0, 0.0, now_str)
         ]
         cursor.executemany('''
             INSERT INTO accounts (name, type, currency, balance, credit_limit, credit_remaining, updated_at)
@@ -163,9 +163,9 @@ def init_db():
             ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
             ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
             ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
-            ('Сберегательный счет', 'asset', 'CAD', 823.0, 0.0, 0.0, now_str),
-            ('Личный аккаунт', 'asset', 'CAD', 609.0, 0.0, 0.0, now_str),
-            ('Interactive Brokers', 'asset', 'CAD', 813.0, 0.0, 0.0, now_str)
+            ('Сберегательный счет', 'asset', 'CAD', 937.0, 0.0, 0.0, now_str),
+            ('Личный аккаунт', 'asset', 'CAD', 0.0, 0.0, 0.0, now_str),
+            ('Interactive Brokers', 'asset', 'CAD', 863.0, 0.0, 0.0, now_str)
         ]
         cursor.executemany('''
             INSERT INTO accounts (name, type, currency, balance, credit_limit, credit_remaining, updated_at)
@@ -239,6 +239,21 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
+        elif parsed.path == '/api/fix-asset-balances':
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE accounts SET balance = 0.0, updated_at = datetime('now') WHERE name = 'Личный аккаунт'")
+                cursor.execute("UPDATE accounts SET balance = 937.0, updated_at = datetime('now') WHERE name = 'Сберегательный счет'")
+                conn.commit()
+                conn.close()
+                
+                import persistence
+                persistence.backup_db()
+                self.send_json({"success": True, "message": "Личный аккаунт set to 0 and Сберегательный счет set to 937."})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
