@@ -941,6 +941,31 @@ def delete_last_transaction():
     conn.close()
     return None, None
 
+def get_current_month_balance():
+    import datetime
+    now_prefix = datetime.datetime.now().strftime('%Y-%m')
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT type, SUM(amount) FROM transactions 
+        WHERE date LIKE ? 
+          AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+        GROUP BY type
+    """, (f"{now_prefix}-%",))
+    rows = dict(cursor.fetchall())
+    conn.close()
+    inc = rows.get('income', 0.0) or 0.0
+    exp = rows.get('expense', 0.0) or 0.0
+    return inc - exp
+
+def get_total_cad_debt():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(balance) FROM accounts WHERE type='debt' AND currency='CAD'")
+    val = cursor.fetchone()[0] or 0.0
+    conn.close()
+    return val
+
 def get_analytics():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -1130,7 +1155,36 @@ class TelegramBot:
                 save_transaction(tx_type, amt, cat, transcribed or raw_input)
                 income, expense, balance = get_analytics()
                 
-                type_label = "Расход 🔴" if tx_type == 'expense' else "Доход 🟢"
+                cat_lower = cat.lower()
+                if any(w in cat_lower for w in ('погашение', 'погашение укр', 'погашение долга')):
+                    type_label = "Погашение долга 💳"
+                    cad_debt = get_total_cad_debt()
+                    status_line = f"💳 <b>Оставшийся долг по картам: ${cad_debt:,.2f} CAD</b>"
+                elif any(w in cat_lower for w in ('сбережения', 'сейвинг')):
+                    type_label = "Пополнение сбережений 🏦"
+                    conn_tmp = sqlite3.connect(DB_FILE)
+                    c_tmp = conn_tmp.cursor()
+                    c_tmp.execute("SELECT balance FROM accounts WHERE name='Сберегательный счет'")
+                    sav_bal = c_tmp.fetchone()[0] or 0.0
+                    conn_tmp.close()
+                    status_line = f"🏦 <b>Сберегательный счет: ${sav_bal:,.2f} CAD</b>"
+                elif any(w in cat_lower for w in ('инвестиции', 'инвестирование')):
+                    type_label = "Инвестиции 📈"
+                    conn_tmp = sqlite3.connect(DB_FILE)
+                    c_tmp = conn_tmp.cursor()
+                    c_tmp.execute("SELECT balance FROM accounts WHERE name='Interactive Brokers'")
+                    inv_bal = c_tmp.fetchone()[0] or 0.0
+                    conn_tmp.close()
+                    status_line = f"📈 <b>Interactive Brokers: ${inv_bal:,.2f} CAD</b>"
+                elif tx_type == 'expense':
+                    type_label = "Расход 🔴"
+                    month_bal = get_current_month_balance()
+                    status_line = f"📊 <b>Баланс за текущий месяц: ${month_bal:,.2f}</b>"
+                else:
+                    type_label = "Доход 🟢"
+                    month_bal = get_current_month_balance()
+                    status_line = f"📊 <b>Баланс за текущий месяц: ${month_bal:,.2f}</b>"
+
                 receipt = (
                     f"✅ <b>Запись добавлена!</b>\n"
                     f"🔹 Тип: <b>{type_label}</b>\n"
@@ -1139,7 +1193,7 @@ class TelegramBot:
                     f"📝 Детали: <i>{transcribed or raw_input}</i>\n\n"
                 )
                 
-                full_reply = f"{prefix}{receipt}✨ {ai_reply}\n\n💳 <b>Текущий баланс: ${balance:,.2f}</b>"
+                full_reply = f"{prefix}{receipt}✨ {ai_reply}\n\n{status_line}"
                 self.send_message(chat_id, full_reply)
                 return
 
