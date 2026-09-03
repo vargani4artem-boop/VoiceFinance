@@ -525,6 +525,24 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
 2. Если в реплике есть финансовое действие (расход, доход, исправление, отчет), извлеки параметры в соответствующие поля JSON, а в "ai_reply" дай теплый дружеский комментарий.
 3. Если пользователь просит найти или показать расходы/доходы за период времени или по определенной категории (например, "расходы на автомобиль за последние 2 месяца", "сколько ушло на еду за полгода"), поставь intent="QUERY_TX", извлеки категорию в "query_category", а период в месяцах в "query_months_count".
 
+4. ВАЖНЕЙШИЕ ПРАВИЛА ПОГАШЕНИЯ ДОЛГОВ И ПЕРЕВОДОВ:
+- Если пользователь пополняет кредитку, гасит кредит или вносит деньги на карту долга (например: "500 пополнил на канадские кредитки", "погасил долг 200", "внес 300 на кредитку", "163 пополнил на укр кредитку"):
+  * intent = "ADD_TX"
+  * type = "income"
+  * category = "погашение укр" (если упоминается украинская/гривневая карта) или "погашение" (для канадских карт)
+  * В поле "ai_reply" напиши: "Отлично! Платеж учтен, долг по кредитным картам уменьшен на указанную сумму 🎉"
+- Если пользователь переводит деньги в накопления (например: "50 сейвинг", "отложил 100 в сбережения"):
+  * intent = "ADD_TX"
+  * type = "income"
+  * category = "сбережения"
+  * В поле "ai_reply" напиши: "Супер! Сберегательный счет пополнен 🎉"
+- If пользователь переводит деньги на брокера/инвестиции (например: "50 на Interactive Brokers", "внес на инвестирование"):
+  * intent = "ADD_TX"
+  * type = "income"
+  * category = "инвестиции"
+  * В поле "ai_reply" напиши: "Отлично! Инвестиционный счет пополнен 📈"
+
+
 Текущее состояние счета: Доходы=${income}, Расходы=${expense}, Чистый остаток=${balance}
 История реплик: {history_str}
 Ввод пользователя: {"ГОЛОСОВОЕ СООБЩЕНИЕ (прослушай аудио)" if audio_bytes else f'"{user_text}"'}
@@ -926,7 +944,7 @@ def delete_last_transaction():
 def get_analytics():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT type, SUM(amount) FROM transactions WHERE category NOT IN ('погашение', 'погашение долга') GROUP BY type")
+    cursor.execute("SELECT type, SUM(amount) FROM transactions WHERE category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование') GROUP BY type")
     rows = dict(cursor.fetchall())
     conn.close()
     
@@ -1211,7 +1229,7 @@ class TelegramBot:
                                 matched_cats.append(db_cat)
                 
                 # Build SQL for expenses grouped by category
-                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense' AND category NOT IN ('погашение', 'погашение долга')"
+                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense' AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
                 params_exp = []
                 
                 if start_date:
@@ -1235,7 +1253,7 @@ class TelegramBot:
                 expenses_grouped = cursor.fetchall()
                 
                 # Build SQL for incomes
-                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income' AND category NOT IN ('погашение', 'погашение долга')"
+                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income' AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
                 params_inc = []
                 
                 if start_date:
