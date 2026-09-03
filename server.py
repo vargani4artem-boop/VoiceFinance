@@ -113,7 +113,7 @@ def init_db():
         initial_accounts = [
             ('Гривневая карта 1', 'debt', 'UAH', 229759.0, 0.0, 0.0, now_str),
             ('Гривневая карта 2', 'debt', 'UAH', 115694.0, 0.0, 0.0, now_str),
-            ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
+            ('Канадская карта 1', 'debt', 'CAD', 5262.0, 7500.0, 2238.0, now_str),
             ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
             ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
             ('Сберегательный счет', 'asset', 'CAD', 937.0, 0.0, 0.0, now_str),
@@ -160,7 +160,7 @@ def init_db():
         initial_accounts = [
             ('Гривневая карта 1', 'debt', 'UAH', 229759.0, 0.0, 0.0, now_str),
             ('Гривневая карта 2', 'debt', 'UAH', 115694.0, 0.0, 0.0, now_str),
-            ('Канадская карта 1', 'debt', 'CAD', 4128.0, 7500.0, 3372.0, now_str),
+            ('Канадская карта 1', 'debt', 'CAD', 5262.0, 7500.0, 2238.0, now_str),
             ('Канадская карта 2', 'debt', 'CAD', 8312.0, 25000.0, 16688.0, now_str),
             ('Канадская карта 3', 'debt', 'CAD', 4733.0, 7500.0, 2767.0, now_str),
             ('Сберегательный счет', 'asset', 'CAD', 937.0, 0.0, 0.0, now_str),
@@ -239,6 +239,22 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
+        elif parsed.path == '/api/set-cad-debt-18307':
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE accounts SET balance = 5262.0, credit_remaining = 2238.0, updated_at = datetime('now') WHERE name = 'Канадская карта 1'")
+                cursor.execute("UPDATE accounts SET balance = 8312.0, credit_remaining = 16688.0, updated_at = datetime('now') WHERE name = 'Канадская карта 2'")
+                cursor.execute("UPDATE accounts SET balance = 4733.0, credit_remaining = 2767.0, updated_at = datetime('now') WHERE name = 'Канадская карта 3'")
+                conn.commit()
+                conn.close()
+                
+                import persistence
+                persistence.backup_db()
+                self.send_json({"success": True, "message": "Canadian debt set to exact 18,307 CAD."})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
