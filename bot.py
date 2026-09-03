@@ -1273,10 +1273,10 @@ class TelegramBot:
                 report += f"• <b>Долг по гривневым картам</b>: {debt_uah:,.2f} UAH\n"
                 report += f"• <b>Долг по канадским картам</b>: {debt_cad:,.2f} CAD\n"
                 
-                report += f"\n📊 <b>Сводка за август:</b>\n"
-                report += f"🟢 Доходы: ${income:,.2f}\n"
-                report += f"🔴 Расходы: ${expense:,.2f}\n"
-                report += f"⚖️ Баланс: ${balance:,.2f}\n"
+                report += f"\n📊 <b>Сводка за {month_name}:</b>\n"
+                report += f"🟢 Доходы: ${inc_m:,.2f}\n"
+                report += f"🔴 Расходы: ${exp_m:,.2f}\n"
+                report += f"⚖️ Баланс: ${bal_m:,.2f}\n"
                 
                 self.send_message(chat_id, report)
                 return
