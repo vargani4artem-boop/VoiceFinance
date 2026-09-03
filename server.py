@@ -239,6 +239,25 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
+        elif parsed.path == '/api/fix-volunteering':
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE transactions 
+                    SET category = 'волонтерство', 
+                        description = '[Auto-Recurring] Волонтерство' 
+                    WHERE description = '[Auto-Recurring] Помощь' OR (amount = 50.0 AND category = 'прочее')
+                """)
+                conn.commit()
+                conn.close()
+                
+                import persistence
+                persistence.backup_db()
+                self.send_json({"success": True, "message": "Updated category to volunteering."})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
