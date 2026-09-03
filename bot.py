@@ -1260,7 +1260,7 @@ class TelegramBot:
                         elif currency == 'CAD':
                             debt_cad += bal
                         
-                income, expense, balance = get_analytics()
+                inc_m, exp_m, bal_m, month_name = get_current_month_analytics()
                 
                 report = f"{prefix}💼 <b>Состояние ваших счетов:</b>\n\n"
                 report += "💰 <b>Активы и резервы:</b>\n"
