@@ -239,22 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/set-cad-debt-18307':
-            try:
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE accounts SET balance = 5262.0, credit_remaining = 2238.0, updated_at = datetime('now') WHERE name = 'Канадская карта 1'")
-                cursor.execute("UPDATE accounts SET balance = 8312.0, credit_remaining = 16688.0, updated_at = datetime('now') WHERE name = 'Канадская карта 2'")
-                cursor.execute("UPDATE accounts SET balance = 4733.0, credit_remaining = 2767.0, updated_at = datetime('now') WHERE name = 'Канадская карта 3'")
-                conn.commit()
-                conn.close()
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "Canadian debt set to exact 18,307 CAD."})
-            except Exception as e:
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
