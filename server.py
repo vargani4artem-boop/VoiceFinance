@@ -239,41 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/fix-bridge':
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=60.0)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA busy_timeout=60000")
-                cursor = conn.cursor()
-                
-                # Delete old recurring car wash if present in September
-                cursor.execute("DELETE FROM transactions WHERE date = '2026-09-01' AND description LIKE '%Мойка машины%'")
-                
-                # Update bridge transaction to $70, category 'инвестиции', description '[Auto-Recurring] Инвестиции (Мост)'
-                cursor.execute("""
-                    UPDATE transactions 
-                    SET amount = 70.0, 
-                        category = 'инвестиции', 
-                        description = '[Auto-Recurring] Инвестиции (Мост)' 
-                    WHERE description LIKE '%Мост%'
-                """)
-                
-                conn.commit()
-                conn.close()
-                conn = None
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "Updated recurring bridge to $70 investment."})
-            except Exception as e:
-                if conn:
-                    try:
-                        conn.close()
-                    except:
-                        pass
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
