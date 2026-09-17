@@ -239,46 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/sync-july':
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=60.0)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA busy_timeout=60000")
-                cursor = conn.cursor()
-                
-                # 1. Delete old July records if any
-                cursor.execute("DELETE FROM transactions WHERE date LIKE '2026-07-%'")
-                
-                # 2. Insert July income
-                cursor.execute(
-                    "INSERT INTO transactions (date, type, amount, category, description, currency, created_at) "
-                    "VALUES ('2026-07-15', 'income', 3900.00, 'зарплата', 'Доход за июль (по данным банка)', 'CAD', '2026-07-15T12:00:00')"
-                )
-                
-                # 3. Insert all July expenses
-                july_list = [('2026-07-31', 20.79, 'кафе', 'Village Ice Cream'), ('2026-07-31', 18.02, 'покупки', 'Amazon'), ('2026-07-31', 50.0, 'инвестиции', 'Internet Interactive Brokers Canad'), ('2026-07-31', 12.6, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-30', 26.24, 'подписки', 'Apple'), ('2026-07-30', 320.0, 'услуги', 'E-Transfer Zoran Stiralki'), ('2026-07-30', 20.0, 'переводы', 'E-Transfer Alya'), ('2026-07-30', 5.76, 'бензин', 'Calgary Co-Op Gas'), ('2026-07-30', 100.13, 'покупки', 'Canadian Tire'), ('2026-07-30', 7.34, 'кафе', 'Tim Hortons'), ('2026-07-28', 18.01, 'бензин', 'Chevron'), ('2026-07-28', 4.08, 'кафе', 'Circle K'), ('2026-07-28', 50.0, 'бензин', 'Calgary Co-Op Gas'), ('2026-07-28', 7.35, 'кафе', 'Tim Hortons'), ('2026-07-27', 115.12, 'продукты', 'Sobeys'), ('2026-07-27', 11.76, 'кафе', 'Village Ice Cream'), ('2026-07-27', 162.75, 'покупки', 'Browns Southcentre'), ('2026-07-27', 49.35, 'покупки', 'Capz'), ('2026-07-27', 0.89, 'покупки', 'Dollarama'), ('2026-07-27', 28.11, 'покупки', 'Shawnessy'), ('2026-07-27', 9.96, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-27', 65.19, 'проценты', 'Finance Charge'), ('2026-07-26', 45.82, 'продукты', 'Sobeys'), ('2026-07-26', 11.55, 'продукты', 'Italian Centre Shop'), ('2026-07-26', 14.49, 'связь', 'Twilio'), ('2026-07-26', 164.07, 'связь', 'Fido'), ('2026-07-25', 37.22, 'продукты', 'Sobeys'), ('2026-07-25', 100.0, 'бензин', 'Shell'), ('2026-07-25', 24.74, 'кафе', 'Tim Hortons'), ('2026-07-25', 11.63, 'кафе', 'Dairy Queen'), ('2026-07-25', 23.34, 'кафе', 'Tim Hortons'), ('2026-07-25', 16.76, 'кафе', 'Tim Hortons'), ('2026-07-25', 20.0, 'переводы', 'E-Transfer Alya'), ('2026-07-25', 52.49, 'авто', 'Mint Smartwash'), ('2026-07-24', 20.07, 'кафе', 'Tim Hortons'), ('2026-07-24', 54.39, 'покупки', 'Amazon'), ('2026-07-24', 15.51, 'кафе', 'Tim Hortons'), ('2026-07-24', 69.94, 'финансы', 'Affirm'), ('2026-07-24', 50.0, 'инвестиции', 'Internet Interactive Brokers Canad'), ('2026-07-23', 71.15, 'продукты', 'FreshCo'), ('2026-07-23', 5.59, 'бензин', 'Circle K'), ('2026-07-23', 9.8, 'кафе', 'Tim Hortons'), ('2026-07-22', 132.05, 'бензин', 'Petro-Canada'), ('2026-07-22', 5.24, 'бензин', 'Chevron'), ('2026-07-22', 419.71, 'погашение укр', 'Intl Visa Monobank Eur'), ('2026-07-22', 12.06, 'кафе', 'Tim Hortons'), ('2026-07-22', 7.79, 'кафе', 'Tim Hortons'), ('2026-07-22', 95.95, 'проценты', 'Finance Charge'), ('2026-07-22', 82.85, 'продукты', 'Sobeys'), ('2026-07-21', 2.09, 'бензин', 'Chevron'), ('2026-07-21', 15.92, 'бензин', 'Chevron'), ('2026-07-21', 25.13, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-20', 24.15, 'покупки', 'Dollarama'), ('2026-07-20', 2.1, 'кафе', "McDonald's"), ('2026-07-20', 31.49, 'покупки', 'Amazon'), ('2026-07-19', 88.16, 'покупки', 'Winners'), ('2026-07-19', 8.37, 'кафе', 'Analog Southcentre'), ('2026-07-19', 71.66, 'покупки', 'Dollarama'), ('2026-07-19', 32.62, 'покупки', 'Dollarama'), ('2026-07-19', 31.49, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-19', 93.42, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-19', 67.31, 'покупки', 'Bath & Body Works'), ('2026-07-18', 12.13, 'продукты', 'Sobeys'), ('2026-07-18', 334.51, 'продукты', 'Sobeys'), ('2026-07-18', 31.49, 'спорт', 'Calgary Gym'), ('2026-07-17', 24.13, 'продукты', 'Sobeys'), ('2026-07-17', 100.99, 'продукты', 'Sobeys'), ('2026-07-17', 5.87, 'кафе', 'Dairy Queen'), ('2026-07-16', 15.0, 'авто', 'Ahs Parking Lots'), ('2026-07-16', 23.09, 'покупки', 'Amazon'), ('2026-07-16', 11.53, 'кафе', 'Tim Hortons'), ('2026-07-16', 17.28, 'бензин', '7-Eleven Gas'), ('2026-07-16', 13.64, 'бензин', '7-Eleven Gas'), ('2026-07-15', 30.44, 'покупки', 'Amazon'), ('2026-07-15', 159.9, 'путешествия', 'Easyjetkd'), ('2026-07-15', 998.7, 'путешествия', 'WestJet Airlines'), ('2026-07-14', 10.59, 'покупки', 'Amazon'), ('2026-07-13', 11.32, 'покупки', 'Amazon'), ('2026-07-13', 434.57, 'продукты', 'Sobeys'), ('2026-07-13', 84.73, 'бензин', 'Petro-Canada Gas'), ('2026-07-12', 8.36, 'бензин', 'Shell Gas'), ('2026-07-12', 18.89, 'кафе', 'W Glacier Sweet Treats'), ('2026-07-12', 17.26, 'продукты', 'Big Fork Harvest Fo'), ('2026-07-12', 29.77, 'продукты', 'Big Fork Harvest Fo'), ('2026-07-12', 43.54, 'продукты', 'Big Fork Harvest Fo'), ('2026-07-12', 10.49, 'подписки', 'Amazon Prime Membership'), ('2026-07-12', 11.62, 'отдых', 'Montanastateparks'), ('2026-07-12', 18.15, 'бензин', 'Conoco Gas'), ('2026-07-12', 85.43, 'бензин', 'Cenex Gas'), ('2026-07-12', 96.99, 'жилье', 'West Glacier Koa Stor'), ('2026-07-12', 4.49, 'жилье', 'West Glacier Koa Stor'), ('2026-07-12', 7.48, 'жилье', 'West Glacier Koa Stor'), ('2026-07-12', 15.75, 'кафе', 'Sweet Peaks Whitefish'), ('2026-07-11', 30.22, 'отдых', 'West Glacier'), ('2026-07-11', 58.51, 'кафе', 'W Glacier Sweet Treats'), ('2026-07-11', 87.2, 'кафе', 'Del'), ('2026-07-10', 162.99, 'продукты', 'Sobeys'), ('2026-07-10', 66.46, 'бензин', 'Petro-Canada Gas'), ('2026-07-10', 68.75, 'услуги', 'Vitalii Vashchenko'), ('2026-07-10', 26.76, 'покупки', 'Amazon'), ('2026-07-10', 50.0, 'инвестиции', 'Internet Interactive Brokers Canad'), ('2026-07-10', 15.09, 'кафе', 'Tim Hortons'), ('2026-07-09', 20.0, 'переводы', 'E-Transfer Alya'), ('2026-07-09', 50.99, 'прочее', 'Intl Assoc Scientologists'), ('2026-07-09', 4.19, 'подписки', 'Apple'), ('2026-07-09', 12.06, 'кафе', 'Tim Hortons'), ('2026-07-09', 43.71, 'услуги', 'Flag Services'), ('2026-07-08', 38.26, 'продукты', "Lina's Italian Mercato"), ('2026-07-08', 26.32, 'покупки', 'Amazon'), ('2026-07-08', 21.0, 'кафе', 'Village Ice Cream'), ('2026-07-06', 55.53, 'продукты', 'Sobeys'), ('2026-07-06', 14.69, 'кафе', '7-Eleven'), ('2026-07-06', 17.35, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-05', 9.3, 'кафе', 'Starbucks'), ('2026-07-05', 27.92, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-05', 17.6, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-04', 136.5, 'кафе', 'Nastin Sweet'), ('2026-07-04', 96.0, 'бензин', 'Circle K Gas'), ('2026-07-04', 13.21, 'кафе', 'Lovely Ice Cream'), ('2026-07-04', 21.97, 'продукты', 'Sobeys'), ('2026-07-04', 22.5, 'бензин', 'Petro-Canada Gas'), ('2026-07-03', 10.5, 'кафе', "Brian's Cafe"), ('2026-07-03', 3.68, 'кафе', "Brian's Cafe"), ('2026-07-03', 27.27, 'здоровье', 'Shoppers Drug Mart'), ('2026-07-03', 16.06, 'кафе', 'Tim Hortons'), ('2026-07-03', 16.95, 'банк', 'Service Charge'), ('2026-07-03', 16.95, 'банк', 'Service Charge'), ('2026-07-03', 39.26, 'кафе', '7-Eleven'), ('2026-07-03', 99.0, 'банк', 'Annual Fee'), ('2026-07-03', 7.5, 'банк', 'Cash Advance Fee'), ('2026-07-03', 0.04, 'проценты', 'Finance Charge'), ('2026-07-02', 20.76, 'кафе', 'Tim Hortons'), ('2026-07-02', 4.19, 'бензин', 'Calgary Co-Op Gas'), ('2026-07-02', 21.59, 'наличные', 'Cash Advance'), ('2026-07-02', 60.65, 'покупки', 'Shawnessy'), ('2026-07-02', 124.88, 'бензин', 'Esso Gas Station'), ('2026-07-01', 14.61, 'связь', 'Twilio'), ('2026-07-01', 200.0, 'переводы', 'Global Money'), ('2026-07-01', 100.0, 'переводы', 'E-Transfer Andriy Stiklo'), ('2026-07-01', 50.0, 'инвестиции', 'Internet Interactive Brokers Canad'), ('2026-07-01', 175.71, 'погашение укр', 'Intl Visa Monobank Uah'), ('2026-07-01', 20.0, 'переводы', 'E-Transfer Alya'), ('2026-07-01', 331.53, 'погашение укр', 'Intl Visa Monobank Uah'), ('2026-07-01', 25.13, 'покупки', 'Amazon')]
-                rows = [(d, 'expense', amt, 'CAD', cat, desc, d + 'T12:00:00') for d, amt, cat, desc in july_list]
-                cursor.executemany(
-                    "INSERT INTO transactions (date, type, amount, currency, category, description, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    rows
-                )
-                conn.commit()
-                conn.close()
-                conn = None
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "July fully synchronized with bank statement."})
-            except Exception as e:
-                if conn:
-                    try:
-                        conn.close()
-                    except:
-                        pass
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
