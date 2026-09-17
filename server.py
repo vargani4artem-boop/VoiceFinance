@@ -42,7 +42,7 @@ def init_db():
     except Exception as e:
         print(f"[Init DB Restore Error] {e}")
         
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=30)
     cursor = conn.cursor()
     
     # Transactions table
@@ -241,7 +241,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_bot_status()
         elif parsed.path == '/api/sync-august':
             try:
-                conn = sqlite3.connect(DB_FILE)
+                conn = sqlite3.connect(DB_FILE, timeout=30)
                 cursor = conn.cursor()
                 # 1. Delete old August records
                 cursor.execute("DELETE FROM transactions WHERE date LIKE '2026-08-%'")
@@ -350,7 +350,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
 
     def get_accounts(self):
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = sqlite3.connect(DB_FILE, timeout=30)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM accounts ORDER BY type ASC, id ASC')
@@ -372,7 +372,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             return
             
         try:
-            conn = sqlite3.connect(DB_FILE)
+            conn = sqlite3.connect(DB_FILE, timeout=30)
             cursor = conn.cursor()
             
             cursor.execute('SELECT type FROM accounts WHERE id = ?', (account_id,))
@@ -416,7 +416,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.send_json({'success': False, 'error': str(e)}, status=500)
 
     def get_transactions(self):
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM transactions ORDER BY created_at DESC')
@@ -450,7 +450,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.send_json({'success': False, 'error': 'Amount must be positive'}, status=400)
             return
 
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO transactions (type, amount, currency, category, description, raw_voice, date, created_at)
@@ -473,7 +473,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         }})
 
     def delete_transaction(self, tx_id):
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         cursor = conn.cursor()
         cursor.execute('DELETE FROM transactions WHERE id = ?', (tx_id,))
         conn.commit()
@@ -488,7 +488,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         self.send_json({'success': True, 'message': 'Transaction deleted'})
 
     def get_categories(self):
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM categories ORDER BY name ASC')
@@ -507,7 +507,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.send_json({'success': False, 'error': 'Category name is required'}, status=400)
             return
 
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         cursor = conn.cursor()
         try:
             cursor.execute('INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?)',
@@ -521,7 +521,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.send_json({'success': False, 'error': 'Category already exists'}, status=400)
 
     def get_analytics(self):
-        conn = sqlite3.connect(DB_FILE)
+        conn = sqlite3.connect(DB_FILE, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
