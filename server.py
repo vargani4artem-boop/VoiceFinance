@@ -239,47 +239,6 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
-        elif parsed.path == '/api/fix-volunteering-and-bridge':
-            conn = None
-            try:
-                conn = sqlite3.connect(DB_FILE, timeout=60.0)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA busy_timeout=60000")
-                cursor = conn.cursor()
-                
-                # 70 volunteering on 2026-09-01
-                cursor.execute("""
-                    UPDATE transactions 
-                    SET amount = 70.0, 
-                        category = 'волонтерство', 
-                        description = '[Auto-Recurring] Волонтерство (помощь другим)' 
-                    WHERE date = '2026-09-01' AND description LIKE '%Волонтерство%'
-                """)
-                
-                # 50 bridge investment on 2026-09-01
-                cursor.execute("""
-                    UPDATE transactions 
-                    SET amount = 50.0, 
-                        category = 'инвестиции', 
-                        description = '[Auto-Recurring] Инвестиции (Мост)' 
-                    WHERE date = '2026-09-01' AND description LIKE '%Мост%'
-                """)
-                
-                conn.commit()
-                conn.close()
-                conn = None
-                
-                import persistence
-                persistence.backup_db()
-                self.send_json({"success": True, "message": "Updated to 70 volunteering and 50 bridge investment."})
-            except Exception as e:
-                if conn:
-                    try:
-                        conn.close()
-                    except:
-                        pass
-                self.send_json({"success": False, "error": str(e)}, status=500)
-            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:
