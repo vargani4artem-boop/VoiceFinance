@@ -1046,9 +1046,8 @@ def check_and_add_monthly_recurring_expenses(chat_id):
             (interest_uah_cad, 'проценты', '[Auto-Recurring] Проценты по кредиту (31% годовых)'),
             (interest_cad_cad, 'проценты', '[Auto-Recurring] Проценты по кредиткам (24% годовых)'),
             (50.0, 'волонтерство', '[Auto-Recurring] Волонтерство'),
-            (40.0, 'бензин', '[Auto-Recurring] Мойка машины'),
             (130.0, 'связь', '[Auto-Recurring] Связь'),
-            (30.0, 'бензин', '[Auto-Recurring] Мост')
+            (70.0, 'инвестиции', '[Auto-Recurring] Инвестиции (Мост)')
         ]
         
         date_str = f"{month_prefix}-01"
