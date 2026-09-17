@@ -239,6 +239,29 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             self.get_analytics()
         elif parsed.path == '/api/bot-status':
             self.get_bot_status()
+        elif parsed.path == '/api/unify-food':
+            try:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE transactions 
+                    SET category = 'продукты' 
+                    WHERE category IN ('еда', 'продукти', 'еда и продукты', 'супермаркет')
+                """)
+                cursor.execute("""
+                    UPDATE transactions 
+                    SET category = 'подарки' 
+                    WHERE category = 'подарок'
+                """)
+                conn.commit()
+                conn.close()
+                
+                import persistence
+                persistence.backup_db()
+                self.send_json({"success": True, "message": "Unified food categories to 'продукты' and gift categories to 'подарки'."})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)}, status=500)
+            return
         elif parsed.path == '/api/logs':
             self.get_logs()
         else:

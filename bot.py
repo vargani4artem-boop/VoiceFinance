@@ -774,7 +774,12 @@ def generate_pdf_report(filename="voicefinance_report.pdf"):
 def normalize_category(cat):
     if not cat:
         return "прочее"
-    return cat.strip().lower()
+    c = cat.strip().lower()
+    if c in ('еда', 'продукты', 'продукти', 'еда и продукты', 'супермаркет', 'магазин'):
+        return 'продукты'
+    if c in ('подарок', 'подарки'):
+        return 'подарки'
+    return c
 
 def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
     try:
