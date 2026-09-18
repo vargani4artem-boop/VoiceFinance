@@ -781,12 +781,20 @@ def normalize_category(cat):
         return 'подарки'
     return c
 
-def adjust_accounts_debt(tx_type, amount, category, is_rollback=False):
+def adjust_accounts_debt(tx_type, amount, category, is_rollback=False, raw=""):
     try:
-        is_uah = False
+        cat_lower = (category or "").lower()
+        raw_lower = (raw or "").lower()
+        is_uah = any(w in cat_lower for w in ('укр', 'uah', 'гривн', 'моно'))
         
-        # Transactions are already in CAD
-        multiplier = 1.0
+        if is_uah:
+            if any(w in raw_lower for w in ('грн', 'uah', 'гривен', 'гривн')) or float(amount) >= 1000:
+                multiplier = 1.0
+            else:
+                multiplier = 30.0
+        else:
+            multiplier = 1.0
+            
         amt_local = float(amount) * multiplier
         
         is_expense = (tx_type == 'expense')
@@ -880,7 +888,7 @@ def save_transaction(tx_type, amount, category, raw, custom_date=None, adjust_de
     
     # Adjust account debt
     if adjust_debt:
-        adjust_accounts_debt(tx_type, amount, category)
+        adjust_accounts_debt(tx_type, amount, category, raw=raw)
     
     if backup:
         try:
