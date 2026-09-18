@@ -526,11 +526,16 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
 3. Если пользователь просит найти или показать расходы/доходы за период времени или по определенной категории (например, "расходы на автомобиль за последние 2 месяца", "сколько ушло на еду за полгода"), поставь intent="QUERY_TX", извлеки категорию в "query_category", а период в месяцах в "query_months_count".
 
 4. ВАЖНЕЙШИЕ ПРАВИЛА ПОГАШЕНИЯ ДОЛГОВ И ПЕРЕВОДОВ:
-- Если пользователь пополняет кредитку, гасит кредит или вносит деньги на карту долга (например: "500 пополнил на канадские кредитки", "погасил долг 200", "внес 300 на кредитку", "163 пополнил на укр кредитку"):
+- Если пользователь пополняет украинскую/гривневую карту или гасит кредит в Украине (например: "163 пополнил на укр кредитку", "внес 5000 грн на украинскую карту"):
   * intent = "ADD_TX"
-  * type = "income"
-  * category = "погашение укр" (если упоминается украинская/гривневая карта) или "погашение" (для канадских карт)
-  * В поле "ai_reply" напиши: "Отлично! Платеж учтен, долг по кредитным картам уменьшен на указанную сумму 🎉"
+  * type = "expense" (СТРОГО РАСХОД! Потому что с украинской карты не делаются покупки, деньги идут на погашение долга и уменьшают сумму кредита)
+  * category = "погашение укр"
+  * В поле "ai_reply" напиши: "Отлично! Платеж по украинскому кредиту записан в расходы месяца, а остаток долга уменьшен 🎉"
+- Если пользователь пополняет канадские/долларовые кредитки (например: "500 пополнил на канадские кредитки", "погасил долг 200 на канадской карте"):
+  * intent = "ADD_TX"
+  * type = "income" (не считается операционным расходом месяца, чтобы избежать двойного учета трат)
+  * category = "погашение"
+  * В поле "ai_reply" напиши: "Отлично! Платеж учтен, лимит канадских карт восстановлен 🎉"
 - Если пользователь переводит деньги в накопления (например: "50 сейвинг", "отложил 100 в сбережения"):
   * intent = "ADD_TX"
   * type = "income"
@@ -797,14 +802,14 @@ def adjust_accounts_debt(tx_type, amount, category, is_rollback=False, raw=""):
             
         amt_local = float(amount) * multiplier
         
-        is_expense = (tx_type == 'expense')
+        is_debt_reduction = (tx_type == 'income') or any(w in cat_lower for w in ('погашение', 'погашение укр', 'погашение долга'))
         if is_rollback:
-            is_expense = not is_expense
+            is_debt_reduction = not is_debt_reduction
             
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        if is_expense:
+        if not is_debt_reduction:
             # We increase debt (decrease credit_remaining, increase balance)
             if is_uah:
                 card_names = ("Гривневая карта 1", "Гривневая карта 2")
@@ -969,7 +974,7 @@ def get_current_month_analytics():
     cursor.execute("""
         SELECT type, SUM(amount) FROM transactions 
         WHERE date LIKE ? 
-          AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+          AND category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
         GROUP BY type
     """, (f"{now_prefix}-%",))
     rows = dict(cursor.fetchall())
@@ -988,7 +993,7 @@ def get_current_month_balance():
     cursor.execute("""
         SELECT type, SUM(amount) FROM transactions 
         WHERE date LIKE ? 
-          AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+          AND category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
         GROUP BY type
     """, (f"{now_prefix}-%",))
     rows = dict(cursor.fetchall())
@@ -1005,10 +1010,18 @@ def get_total_cad_debt():
     conn.close()
     return val
 
+def get_total_uah_debt():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(balance) FROM accounts WHERE type='debt' AND currency='UAH'")
+    val = cursor.fetchone()[0] or 0.0
+    conn.close()
+    return val
+
 def get_analytics():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT type, SUM(amount) FROM transactions WHERE category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование') GROUP BY type")
+    cursor.execute("SELECT type, SUM(amount) FROM transactions WHERE category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование') GROUP BY type")
     rows = dict(cursor.fetchall())
     conn.close()
     
@@ -1194,8 +1207,13 @@ class TelegramBot:
                 income, expense, balance = get_analytics()
                 
                 cat_lower = cat.lower()
-                if any(w in cat_lower for w in ('погашение', 'погашение укр', 'погашение долга')):
-                    type_label = "Погашение долга 💳"
+                is_uah_card = any(w in cat_lower for w in ('укр', 'uah', 'гривн', 'моно')) or any(w in (transcribed or raw_input or '').lower() for w in ('укр', 'гривн', 'моно', 'uah', 'грн'))
+                if 'погашение укр' in cat_lower or (is_uah_card and any(w in cat_lower for w in ('погашение', 'долг'))):
+                    type_label = "Погашение укр. кредита 💳 (Расход)"
+                    uah_debt = get_total_uah_debt()
+                    status_line = f"💳 <b>Оставшийся долг по гривневым картам: {uah_debt:,.2f} UAH</b>"
+                elif any(w in cat_lower for w in ('погашение', 'погашение долга')):
+                    type_label = "Погашение канадских карт 💳"
                     cad_debt = get_total_cad_debt()
                     status_line = f"💳 <b>Оставшийся долг по картам: ${cad_debt:,.2f} CAD</b>"
                 elif any(w in cat_lower for w in ('сбережения', 'сейвинг')):
@@ -1321,7 +1339,7 @@ class TelegramBot:
                                 matched_cats.append(db_cat)
                 
                 # Build SQL for expenses grouped by category
-                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense' AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
+                sql_exp = "SELECT category, SUM(amount) FROM transactions WHERE type='expense' AND category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
                 params_exp = []
                 
                 if start_date:
@@ -1345,7 +1363,7 @@ class TelegramBot:
                 expenses_grouped = cursor.fetchall()
                 
                 # Build SQL for incomes
-                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income' AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
+                sql_inc = "SELECT SUM(amount) FROM transactions WHERE type='income' AND category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')"
                 params_inc = []
                 
                 if start_date:

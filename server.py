@@ -498,7 +498,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
         cursor.execute("""
             SELECT type, SUM(amount) as total 
             FROM transactions 
-            WHERE category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+            WHERE category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
             GROUP BY type
         """)
         totals = {row['type']: row['total'] for row in cursor.fetchall()}
@@ -512,7 +512,7 @@ class VoiceFinanceHandler(SimpleHTTPRequestHandler):
             SELECT category, SUM(amount) as total 
             FROM transactions 
             WHERE type = 'expense' 
-              AND category NOT IN ('погашение', 'погашение долга', 'погашение укр', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
+              AND category NOT IN ('погашение', 'погашение долга', 'сбережения', 'сейвинг', 'инвестиции', 'инвестирование')
             GROUP BY category 
             ORDER BY total DESC 
             LIMIT 5
