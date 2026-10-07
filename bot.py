@@ -829,13 +829,8 @@ def adjust_accounts_debt(tx_type, amount, category, is_rollback=False, raw=""):
         
         if not is_debt_reduction:
             # We increase debt (decrease credit_remaining, increase balance)
-            if is_uah:
-                card_names = ("Гривневая карта 1", "Гривневая карта 2")
-            else:
-                card_names = ("Канадская карта 1", "Канадская карта 2", "Канадская карта 3")
-                
-            placeholders = ",".join("?" for _ in card_names)
-            cursor.execute(f"SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE name IN ({placeholders}) ORDER BY id ASC", card_names)
+            curr = 'UAH' if is_uah else 'CAD'
+            cursor.execute("SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE type='debt' AND currency=? ORDER BY id ASC", (curr,))
             cards = cursor.fetchall()
             
             remaining_to_charge = amt_local
@@ -863,13 +858,8 @@ def adjust_accounts_debt(tx_type, amount, category, is_rollback=False, raw=""):
                 cursor.execute("UPDATE accounts SET credit_remaining = ?, balance = ?, updated_at = ? WHERE id = ?", (new_remaining, new_bal, datetime.now().isoformat(), last_card_id))
         else:
             # We decrease debt (increase credit_remaining, decrease balance)
-            if is_uah:
-                card_names = ("Гривневая карта 1", "Гривневая карта 2")
-            else:
-                card_names = ("Канадская карта 1", "Канадская карта 2", "Канадская карта 3")
-                
-            placeholders = ",".join("?" for _ in card_names)
-            cursor.execute(f"SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE name IN ({placeholders}) ORDER BY id ASC", card_names)
+            curr = 'UAH' if is_uah else 'CAD'
+            cursor.execute("SELECT id, credit_limit, credit_remaining, balance FROM accounts WHERE type='debt' AND currency=? ORDER BY id ASC", (curr,))
             cards = cursor.fetchall()
             
             remaining_to_repay = amt_local
