@@ -51,17 +51,35 @@ except ImportError:
 DB_FILE = os.path.join(os.path.dirname(__file__), "finance.db")
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8875858432:AAEe6xbzBi82Om75WpP19AE_8J8y1LKGwqo").strip()
 import base64
-# Encoded version of the user's fresh working key
-ENCODED_KEY = "QVEuQWI4Uk42S3dfbEoxSHFhUExhaHJRSHZkTzJYWkVmcHZleDhWbGgxWkhjWFQ1N2hPWEE="
-GEMINI_KEY = base64.b64decode(ENCODED_KEY).decode('utf-8')
 
-genai_client = None
-if HAS_GENAI and GEMINI_KEY:
+# Encoded version of the fallback working key
+ENCODED_KEY = "QVEuQWI4Uk42S3dfbEoxSHFhUExhaHJRSHZkTzJYWkVmcHZleDhWbGgxWkhjWFQ1N2hPWEE="
+default_key = ""
+try:
+    default_key = base64.b64decode(ENCODED_KEY).decode('utf-8')
+except Exception:
+    pass
+
+env_gemini_keys = os.environ.get("GEMINI_API_KEY", "").strip()
+raw_keys = env_gemini_keys if env_gemini_keys else default_key
+GEMINI_KEYS = [k.strip() for k in raw_keys.split(',') if k.strip()]
+if default_key and default_key not in GEMINI_KEYS:
+    GEMINI_KEYS.append(default_key)
+
+print(f"[Bot] Loaded {len(GEMINI_KEYS)} Gemini API key(s) for rotation.")
+
+def get_genai_client(api_key):
+    if not HAS_GENAI or not api_key:
+        return None
     try:
-        genai_client = genai.Client(api_key=GEMINI_KEY)
-        print("[Bot] google.genai SDK Client initialized successfully!")
+        return genai.Client(api_key=api_key)
     except Exception as e:
-        print(f"[Bot] Client init error: {e}")
+        print(f"[Bot] genai.Client error: {e}")
+        return None
+
+genai_client = get_genai_client(GEMINI_KEYS[0]) if GEMINI_KEYS else None
+if genai_client:
+    print("[Bot] google.genai SDK Client initialized successfully!")
 
 # Per-user conversational memory
 USER_CHAT_HISTORY = {}
@@ -311,22 +329,28 @@ CSV образец:
         
         models_to_try = [
             'gemini-3.5-flash-lite', 
-            'gemini-3.1-flash-lite', 
-            'gemini-2.0-flash-lite', 
             'gemini-3.5-flash', 
-            'gemini-2.0-flash'
+            'gemini-3.8-flash', 
+            'gemini-flash-lite-latest', 
+            'gemini-flash-latest'
         ]
         res = None
-        for m in models_to_try:
-            try:
-                res = genai_client.models.generate_content(
-                    model=m,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                break
-            except Exception:
+        for key in GEMINI_KEYS:
+            client = get_genai_client(key)
+            if not client:
                 continue
+            for m in models_to_try:
+                try:
+                    res = client.models.generate_content(
+                        model=m,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    break
+                except Exception:
+                    continue
+            if res:
+                break
                 
         if not res:
             return "❌ Все ИИ-модели заняты. Пожалуйста, попробуйте импортировать файл чуть позже."
@@ -508,7 +532,7 @@ CSV образец:
         return "❌ Не удалось распознать структуру таблиц в файле. Убедитесь, что листы содержат колонки с понятными названиями (например: Дата, Сумма, Категория, Описание)."
 
 def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
-    if not genai_client:
+    if not HAS_GENAI or not GEMINI_KEYS:
         return None
 
     history = USER_CHAT_HISTORY.get(chat_id, [])
@@ -588,38 +612,44 @@ def ask_gemini_brain(user_text=None, chat_id=None, audio_bytes=None):
 
     models_to_try = [
         'gemini-3.5-flash-lite', 
-        'gemini-3.1-flash-lite', 
-        'gemini-2.0-flash-lite', 
         'gemini-3.5-flash', 
-        'gemini-2.0-flash'
+        'gemini-3.8-flash', 
+        'gemini-flash-lite-latest', 
+        'gemini-flash-latest'
     ]
     
-    for m in models_to_try:
-        try:
-            res = genai_client.models.generate_content(
-                model=m,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+    for key in GEMINI_KEYS:
+        client = get_genai_client(key)
+        if not client:
+            continue
+        for m in models_to_try:
+            try:
+                res = client.models.generate_content(
+                    model=m,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
-            )
-            cleaned = clean_json_string(res.text)
-            data = json.loads(cleaned)
-            return data
-        except Exception as e:
-            err_str = str(e)
-            GEMINI_ERRORS.append(f"{m}: {err_str}")
-            if len(GEMINI_ERRORS) > 20:
-                GEMINI_ERRORS.pop(0)
-            
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                time.sleep(1)
-                continue
-            elif "404" in err_str:
-                continue
-            else:
-                print(f"[Gemini Error on {m}] {e}")
-                continue
+                cleaned = clean_json_string(res.text)
+                data = json.loads(cleaned)
+                return data
+            except Exception as e:
+                err_str = str(e)
+                GEMINI_ERRORS.append(f"{m}: {err_str}")
+                if len(GEMINI_ERRORS) > 20:
+                    GEMINI_ERRORS.pop(0)
+                
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    time.sleep(0.5)
+                    if len(GEMINI_KEYS) > 1:
+                        break
+                    continue
+                elif "404" in err_str:
+                    continue
+                else:
+                    print(f"[Gemini Error on {m}] {e}")
+                    continue
 
     return None
 
@@ -1094,6 +1124,99 @@ def check_and_add_monthly_recurring_expenses(chat_id):
     except Exception as e:
         print(f"[check_and_add_monthly_recurring_expenses error] {e}")
 
+def fallback_parse_transaction(raw_text):
+    if not raw_text:
+        return None
+    text = raw_text.strip().lower()
+    
+    # 1. Cancel / delete last
+    if text in ('отмена', 'отменить', 'удалить', 'отмени последнюю', 'удалить последнюю', 'отмени запись'):
+        return {'intent': 'DELETE_LAST', 'ai_reply': 'Последняя транзакция успешно отменена.'}
+        
+    # 2. Balance query
+    if any(q == text for q in ('баланс', 'счет', 'счёт', 'мой баланс', 'состояние счетов')):
+        return {'intent': 'QUERY_BALANCE'}
+
+    # 3. Extract amount: e.g. "20", "20.50", "20,50", "$20", "20$", "20 cad", "50 usd", "3000 грн"
+    amt_match = re.search(r'(?:[\$€₴]\s*)?(\d+(?:[.,]\d{1,2})?)(?:\s*[\$€₴]|\s*(?:cad|usd|долл|долларов|доллара|грн|гривен|гривны|uah))?', text)
+    if not amt_match:
+        return None
+        
+    amt_str = amt_match.group(1).replace(',', '.')
+    try:
+        amount = float(amt_str)
+        if amount <= 0:
+            return None
+    except ValueError:
+        return None
+        
+    # Extract remaining text without the amount
+    rem_text = text[:amt_match.start()] + " " + text[amt_match.end():]
+    rem_text = re.sub(r'[\.,!?;:()]+', ' ', rem_text).strip()
+    filler_words = {'за', 'на', 'в', 'по', 'купил', 'оплатил', 'потратил', 'перевел', 'пополнил', 'внес', 'записал', 'долларов', 'доллара', 'дол', 'cad', 'usd', 'грн', 'uah', 'гривен', 'гривны'}
+    tokens = [w for w in rem_text.split() if w not in filler_words]
+    raw_cat = " ".join(tokens).strip()
+    
+    # Currency conversions
+    is_usd = any(w in text for w in ('usd', 'долларов сша', 'американских', 'американских долларов'))
+    is_uah = any(w in text for w in ('грн', 'uah', 'гривен', 'гривны'))
+    if is_usd:
+        amount = round(amount * 1.36, 2)
+    elif is_uah:
+        amount = round(amount / 30.0, 2)
+        
+    tx_type = 'expense'
+    category = raw_cat or 'разное'
+    
+    # Category detection rules
+    if any(w in text for w in ('укр', 'гривневую', 'гривневые', 'моно', 'приват', 'украинск')):
+        tx_type = 'expense'
+        category = 'погашение укр'
+    elif any(w in text for w in ('канадск', 'кредитк', 'кредитки', 'карт', 'карты', 'погасил', 'погашение', 'долг')):
+        if any(w in text for w in ('пополнил', 'погасил', 'внес', 'оплатил долг', 'погашение')):
+            tx_type = 'income'
+            category = 'погашение'
+    elif any(w in text for w in ('сейвинг', 'сбережения', 'сберегательн', 'копилк')):
+        tx_type = 'income'
+        category = 'сбережения'
+    elif any(w in text for w in ('инвестиц', 'брокер', 'interactive', 'ibkr', 'акции')):
+        tx_type = 'income'
+        category = 'инвестиции'
+    elif any(w in text for w in ('mas', 'мас', 'волонтер', 'волонтёр', 'благотворительн', 'пожертвован')):
+        tx_type = 'expense'
+        category = 'MAS'
+    elif 'алимент' in text:
+        tx_type = 'expense'
+        category = 'алименты'
+    elif any(w in text for w in ('линкед', 'linkedin', 'подписк', 'ютуб', 'youtube', 'нетфликс', 'netflix', 'spotify', 'спотифай', 'chatgpt', 'чатгпт')):
+        tx_type = 'expense'
+        category = 'подписки'
+    elif any(w in text for w in ('кафе', 'ресторан', 'кофе', 'coffee', 'старбакс', 'макдональдс', 'бургер', 'пицца')):
+        tx_type = 'expense'
+        category = 'кафе'
+    elif any(w in text for w in ('продукт', 'супермаркет', 'магазин', 'еда', 'костко', 'costco', 'walmart', 'нофрилс', 'nofrills', 'мясо', 'молоко', 'хлеб')):
+        tx_type = 'expense'
+        category = 'продукты'
+    elif any(w in text for w in ('бензин', 'заправк', 'топлив', 'газ', 'авто', 'машин', 'мойка', 'парковк')):
+        tx_type = 'expense'
+        category = 'бензин'
+    elif any(w in text for w in ('аптек', 'лекарств', 'врач', 'медицин', 'здоровь')):
+        tx_type = 'expense'
+        category = 'здоровье'
+    elif any(w in text for w in ('зарплат', 'зп', 'доход', 'фриланс', 'приход', 'получил')):
+        tx_type = 'income'
+        category = 'доход'
+    else:
+        category = normalize_category(raw_cat) if raw_cat else 'разное'
+        
+    return {
+        'intent': 'ADD_TX',
+        'type': tx_type,
+        'amount': round(amount, 2),
+        'category': category,
+        'ai_reply': 'Запись успешно сохранена в резервном оффлайн-режиме 👍'
+    }
+
 class TelegramBot:
     def __init__(self, token):
         self.token = token
@@ -1162,7 +1285,7 @@ class TelegramBot:
             payload['reply_markup'] = reply_markup
         return self.send_request('sendMessage', payload)
 
-    def process_ai_result(self, chat_id, gemini_res, raw_input="сообщение"):
+    def process_ai_result(self, chat_id, gemini_res, raw_input="сообщение", prefix=""):
         # Search for a Google Sheet URL in raw input, transcribed text, or recent history
         sheet_id = extract_google_sheets_id(raw_input)
         
@@ -1194,7 +1317,8 @@ class TelegramBot:
             intent = gemini_res.get('intent', 'CHAT')
             ai_reply = gemini_res.get('ai_reply', '')
             transcribed = gemini_res.get('transcribed_text', '')
-            prefix = f"🎤 <i>«{transcribed}»</i>\n\n" if transcribed else ""
+            if transcribed:
+                prefix = f"🎤 <i>«{transcribed}»</i>\n\n"
 
             if intent == 'EXPORT_PDF':
                 income, expense, balance = get_analytics()
@@ -1455,15 +1579,22 @@ class TelegramBot:
             return
 
         is_pdf_request = any(kw in lower_input for kw in ['пдф', 'pdf', 'отчет', 'отчёт', 'график в пдф', 'выгрузи отчет'])
-
         if is_pdf_request:
             pdf_path = generate_pdf_report("voicefinance_report.pdf")
             caption_msg = f"📄 <b>Ваш готовый PDF отчёт с финансовой сводкой!</b>"
             self.send_document(chat_id, pdf_path, caption=caption_msg)
             return
 
-        # Smart fallback explanation if Gemini failed
-        is_question = any(kw in lower_input for kw in ['ли', 'как', 'почему', 'что', 'где', 'когда', 'можешь', 'умеешь', 'таблиц'])
+        # 3. Fallback transaction parser for simple spending entries when Gemini is offline or rate-limited
+        fallback_res = fallback_parse_transaction(raw_input)
+        if fallback_res:
+            self.process_ai_result(chat_id, fallback_res, raw_input=raw_input, prefix="⚡ <b>[Оффлайн-режим]:</b>\n")
+            return
+
+        # 4. Smart fallback explanation if Gemini failed and it's a question or voice message
+        words = set(re.findall(r'\b\w+\b', lower_input))
+        question_words = {'ли', 'как', 'почему', 'что', 'где', 'когда', 'можешь', 'умеешь', 'кто', 'какой', 'какая', 'какие', 'сколько', 'зачем'}
+        is_question = bool(words & question_words) or '?' in lower_input or 'таблиц' in lower_input
         if is_question or raw_input == "голосовая заметка":
             error_msg = (
                 "⚠️ <b>Временные ограничения связи с ИИ</b>\n\n"
@@ -1471,11 +1602,15 @@ class TelegramBot:
                 "<b>Как это исправить за 10 секунд:</b>\n"
                 "1. Получите новый бесплатный ключ в Google AI Studio: 👉 <b><a href='https://aistudio.google.com/'>aistudio.google.com</a></b>\n"
                 "2. Зайдите в панель управления Render ➔ ваш сервис ➔ вкладка <b>Environment</b>.\n"
-                "3. Обновите значение переменной <code>GEMINI_API_KEY</code> новым ключом.\n"
+                "3. Обновите значение переменной <code>GEMINI_API_KEY</code> новым ключом (можно указать несколько ключей через запятую).\n"
                 "4. Сохраните изменения, и бот сразу же сможет полноценно отвечать на любые вопросы!"
             )
             self.send_message(chat_id, error_msg)
             return
+
+        # 5. Default prompt if message couldn't be parsed
+        self.send_message(chat_id, "⚠️ Не удалось распознать запись или связаться с ИИ. Попробуйте указать сумму и категорию, например: <code>20 кафе</code> или <code>50 такси</code>.")
+        return
 
     def handle_update(self, update):
         try:
